@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An accessible sign-up form built for The Odin Project.">
+  <title>Join Fern & Field</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="signup.css">
+  <script src="signup.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#signup">Skip to registration</a>
+  <aside class="illustration" aria-label="Fern and Field">
+    <a class="wordmark" href="index.html" aria-label="Fern and Field, project home">
+      <svg aria-hidden="true" viewBox="0 0 48 48"><path d="M10 38C5 14 22 5 41 7c-1 23-12 34-29 28M8 42 34 14m-15 16-2-10m8 3 10-1"/></svg>
+      <span>Fern & Field</span>
+    </a>
+    <div class="image-caption"><span>A little closer to nature.</span><small>Original botanical SVG illustration · Created for this project</small></div>
+  </aside>
+  <main id="signup">
+    <div class="introduction">
+      <p class="eyebrow">A growing community</p>
+      <h1>Make room for<br>something green.</h1>
+      <p>Little gardens. Big ideas. Join people finding a slower, greener way to spend their days.</p>
+    </div>
+    <form id="registration" action="signup.html" method="post">
+      <div class="form-surface">
+        <h2>Let’s put down roots.</h2>
+        <p class="form-note">Fields marked * are required.</p>
+        <fieldset>
+          <legend class="visually-hidden">Your account details</legend>
+          <div class="field"><label for="first-name">First name *</label><input id="first-name" name="first_name" autocomplete="given-name" required maxlength="100"></div>
+          <div class="field"><label for="last-name">Last name *</label><input id="last-name" name="last_name" autocomplete="family-name" required maxlength="100"></div>
+          <div class="field"><label for="email">Email *</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="phone">Phone <span>(optional)</span></label><input id="phone" name="phone" type="tel" autocomplete="tel"></div>
+          <div class="field"><label for="password">Password *</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required aria-describedby="password-help"><small id="password-help">Use at least 8 characters.</small></div>
+          <div class="field"><label for="confirmation">Confirm password *</label><input id="confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required aria-describedby="match-error"><small id="match-error" aria-live="polite"></small></div>
+        </fieldset>
+      </div>
+      <div class="form-footer">
+        <button class="primary" type="submit" disabled>Create account <span aria-hidden="true">↗</span></button>
+        <p id="result" role="status"></p>
+        <p class="demo-note">Course project demo. No account is created and no form data is sent or saved.</p>
+        <details><summary>Already have an account? Log in</summary><p>This is a front-end registration exercise. A login service is outside the project’s scope.</p></details>
+      </div>
+    </form>
+    <noscript><p class="no-script">Enable JavaScript to try the local demo submission. Do not submit personal data without it.</p></noscript>
+  </main>
+</body>
+</html>

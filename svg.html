@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SVG practice — The Odin Project</title>
+  <style>
+    body { font: 1rem/1.6 system-ui; max-width: 64rem; margin: 3rem auto; padding: 0 1rem; color: #173b30; background: #f6f8f4; }
+    .examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 2rem; }
+    figure { margin: 0; padding: 1rem; background: white; border: 1px solid #cad7cb; }
+    svg { display: block; width: 100%; height: auto; background: #eef3e9; }
+    .practice-circle { fill: #64894c; stroke: #173b30; stroke-width: 3; }
+    figcaption { padding-top: 1rem; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <h1>SVG: shapes, scaling and presentation</h1>
+  <p>Original practice demonstrating an inline SVG, a linked SVG, and a shifted viewBox. The internal coordinates stay independent of the displayed image size.</p>
+  <div class="examples">
+    <figure>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" role="img" aria-labelledby="shapes-title">
+        <title id="shapes-title">A rectangle, circle, ellipse, triangle and diagonal line</title>
+        <rect x="12" y="12" width="62" height="44" rx="6" fill="#d9b66c"/>
+        <circle class="practice-circle" cx="128" cy="40" r="26"/>
+        <ellipse cx="45" cy="102" rx="31" ry="18" fill="#9cbdb0"/>
+        <polygon points="100,128 134,70 168,128" fill="none" stroke="#173b30" stroke-width="3"/>
+        <line x1="14" y1="146" x2="184" y2="146" stroke="#173b30" stroke-width="2" stroke-dasharray="6 4"/>
+      </svg>
+      <figcaption>Inline: CSS styles the circle. Geometry uses SVG coordinates.</figcaption>
+    </figure>
+    <figure>
+      <img src="leaf.svg" alt="An original green leaf illustration" width="200" height="160" style="width:100%;height:auto">
+      <figcaption>Linked image: reusable and cacheable; the host page cannot select its internal paths with CSS.</figcaption>
+    </figure>
+    <figure>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 100 80" role="img" aria-labelledby="zoom-title">
+        <title id="zoom-title">The same circle enlarged by a smaller, shifted viewBox</title>
+        <circle class="practice-circle" cx="128" cy="40" r="26"/>
+      </svg>
+      <figcaption>A smaller viewBox magnifies the visible region. Its first two values move the origin.</figcaption>
+    </figure>
+  </div>
+  <p>SVG is suitable for icons and diagrams. Photographs generally belong in raster formats such as JPEG, WebP or AVIF.</p>
+  <p>Reading: <a href="https://www.theodinproject.com/lessons/node-path-intermediate-html-and-css-svg">Odin SVG lesson</a> and <a href="https://www.joshwcomeau.com/svg/friendly-introduction-to-svg/">Josh W. Comeau’s SVG introduction</a>.</p>
+</body>
+</html>

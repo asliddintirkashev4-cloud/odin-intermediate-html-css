@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An admin dashboard built with nested CSS Grid for The Odin Project.">
+  <title>Fieldwork — Project dashboard</title>
+  <link rel="stylesheet" href="dashboard.css"><script src="dashboard.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#projects">Skip to projects</a>
+  <aside class="sidebar">
+    <a class="brand" href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 32 32"><rect x="2" y="2" width="11" height="11"/><rect x="19" y="2" width="11" height="18"/><rect x="2" y="19" width="11" height="11"/><rect x="19" y="26" width="11" height="4"/></svg>Fieldwork<span>Workspace / 01</span></a>
+    <nav aria-label="Workspace navigation">
+      <p class="nav-label">Workspace</p>
+      <a href="#projects" aria-current="page"><span aria-hidden="true">▦</span> Projects <small>06</small></a>
+      <a href="#announcements"><span aria-hidden="true">◷</span> Announcements</a>
+      <a href="#trending"><span aria-hidden="true">↗</span> Community</a>
+      <p class="nav-label">Coursework</p>
+      <a href="signup.html"><span aria-hidden="true">▤</span> Sign-up form</a>
+      <a href="svg.html"><span aria-hidden="true">◇</span> SVG practice</a>
+      <a href="planets.html"><span aria-hidden="true">⊞</span> Planet table</a>
+      <a href="index.html"><span aria-hidden="true">←</span> Project home</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="avatar">MO</span><div>Morgan Oakley<small>Personal workspace · Demo</small></div></div>
+  </aside>
+  <header class="header">
+    <div class="toolbar">
+      <form class="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><label class="visually-hidden" for="search">Search projects</label><input id="search" type="search" placeholder="Find a project…" autocomplete="off"></form>
+      <a class="notification" href="#announcements" aria-label="Read announcements"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a6 6 0 0 1 12 0c0 7 3 7 3 8H3c0-1 3-1 3-8Zm4 11h4"/></svg></a>
+      <span class="avatar small">MO</span><span class="toolbar-name">Morgan Oakley</span>
+    </div>
+    <div class="welcome"><div><p class="eyebrow">Monday mindset, every day</p><h1>Good things take shape.</h1><p>Welcome back, Morgan. Here’s what you’re building.</p></div><button id="new-project" type="button">+ New project</button></div>
+  </header>
+  <main>
+    <section id="projects" aria-labelledby="projects-title">
+      <div class="section-heading"><div><h2 id="projects-title">Your projects <span id="count">6</span></h2><p>Small experiments. Meaningful progress.</p></div><label class="sort">Show<select id="filter"><option value="all">All projects</option><option value="starred">Starred</option></select></label></div>
+      <div class="project-grid" id="project-grid">
+        <article class="project" data-id="fern"><p class="category">HTML & CSS</p><h3>Fern & Field</h3><p>A botanical sign-up experience with native validation, accessible labels and a quiet green palette.</p><div class="project-footer"><span class="status">Ready to review</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star Fern and Field">☆</button><a href="signup.html" aria-label="Open Fern and Field">↗</a></div></div></article>
+        <article class="project" data-id="orbit"><p class="category">HTML TABLES</p><h3>Planet atlas</h3><p>A semantic view of the solar system. Row groups, column headers and planetary facts, all in one place.</p><div class="project-footer"><span class="status">Ready to review</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star Planet atlas">☆</button><a href="planets.html" aria-label="Open Planet atlas">↗</a></div></div></article>
+        <article class="project" data-id="vectors"><p class="category">SVG</p><h3>Shapes in the wild</h3><p>Playing with vector geometry, presentation attributes, viewBox scaling and reusable linked illustrations.</p><div class="project-footer"><span class="status">Ready to review</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star Shapes in the wild">☆</button><a href="svg.html" aria-label="Open Shapes in the wild">↗</a></div></div></article>
+        <article class="project" data-id="journal"><p class="category">CONCEPT / DEMO</p><h3>The garden journal</h3><p>A place to keep track of what’s growing, what needs a little care, and what to plant next season.</p><div class="project-footer"><span class="status planned">Planned concept</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star The garden journal">☆</button><button class="preview" type="button" aria-label="Preview The garden journal">↗</button></div></div></article>
+        <article class="project" data-id="library"><p class="category">CONCEPT / DEMO</p><h3>A shelf of ideas</h3><p>A tiny reading collection for the books you return to. Organize your shelf and find your next good read.</p><div class="project-footer"><span class="status planned">Planned concept</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star A shelf of ideas">☆</button><button class="preview" type="button" aria-label="Preview A shelf of ideas">↗</button></div></div></article>
+        <article class="project" data-id="weekend"><p class="category">CONCEPT / DEMO</p><h3>The weekend list</h3><p>Less scrolling, more doing. Collect a few simple things you would like to make time for this weekend.</p><div class="project-footer"><span class="status planned">Planned concept</span><div><button class="star" type="button" aria-pressed="false" aria-label="Star The weekend list">☆</button><button class="preview" type="button" aria-label="Preview The weekend list">↗</button></div></div></article>
+      </div>
+      <p id="empty" hidden>No projects match. Try a different search or show all projects.</p>
+      <p id="feedback" role="status" class="visually-hidden"></p>
+    </section>
+    <aside class="right-column">
+      <section id="announcements" aria-labelledby="announcements-title"><h2 id="announcements-title">Announcements</h2><div class="announcements"><article><p class="date">Workspace note</p><h3>A little room to experiment</h3><p>This dashboard is a front-end course project. Community updates and profiles are sample content.</p></article><article><p class="date">Project tip</p><h3>Build one section at a time</h3><p>Start with the outer grid, then give each section its own layout. The details become easier.</p></article><article><p class="date">Try it out</p><h3>Keep your favorites close</h3><p>Star a project, search by its name, or create a temporary project for this session.</p></article></div></section>
+      <section id="trending" aria-labelledby="trending-title"><h2 id="trending-title">Around the community</h2><div class="people"><div><span class="avatar clay">TL</span><p>@taylor<small>Growing a garden journal</small></p></div><div><span class="avatar sand">JP</span><p>@jules<small>Exploring a new grid</small></p></div><div><span class="avatar">MO</span><p>@morgan<small>Making a little progress</small></p></div></div></section>
+      <p class="footnote">Built with care. And CSS Grid.<br>The Odin Project · Intermediate HTML & CSS</p>
+    </aside>
+  </main>
+  <dialog id="project-dialog" aria-labelledby="dialog-title"><form id="project-form"><div class="dialog-heading"><h2 id="dialog-title">A fresh start.</h2><button type="button" id="close-dialog" aria-label="Close new project">×</button></div><p>Create a temporary project. It stays until this page is reloaded.</p><label for="project-title">Project name</label><input id="project-title" name="title" required maxlength="70"><label for="project-description">Description</label><textarea id="project-description" name="description" required maxlength="250" rows="3"></textarea><button type="submit">Create project</button></form></dialog>
+  <dialog id="preview-dialog" aria-labelledby="preview-title"><h2 id="preview-title"></h2><p id="preview-description"></p><p>This card is sample content for the dashboard layout.</p><button id="close-preview" type="button">Close preview</button></dialog>
+</body>
+</html>
