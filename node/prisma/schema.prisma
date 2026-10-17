@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id               Int             @id @default(autoincrement())
+  email            String          @unique @db.VarChar(254)
+  firstName        String          @db.VarChar(80)
+  lastName         String          @db.VarChar(80)
+  passwordHash     String
+  member           Boolean         @default(false)
+  admin            Boolean         @default(false)
+  bio              String          @default("") @db.VarChar(200)
+  avatar           String          @default("")
+  createdAt        DateTime        @default(now())
+  clubMessages     ClubMessage[]
+  folders          Folder[]
+  files            StoredFile[]
+  posts            BlogPost[]
+  comments         BlogComment[]
+  sent             DirectMessage[] @relation("Sender")
+  received         DirectMessage[] @relation("Recipient")
+  socialPosts      SocialPost[]
+  socialComments   SocialComment[]
+  likes            Like[]
+  followRequests   Follow[]        @relation("Follower")
+  incomingRequests Follow[]        @relation("Following")
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model ClubMessage {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(120)
+  text      String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Folder {
+  id      Int           @id @default(autoincrement())
+  name    String        @db.VarChar(120)
+  ownerId Int
+  owner   User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  files   StoredFile[]
+  shares  FolderShare[]
+
+  @@unique([ownerId, name])
+}
+
+model StoredFile {
+  id         String   @id @default(uuid())
+  name       String   @db.VarChar(180)
+  mime       String
+  size       Int
+  url        String
+  storageKey String   @unique
+  data       Bytes?
+  createdAt  DateTime @default(now())
+  ownerId    Int
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  folderId   Int
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Restrict)
+}
+
+model FolderShare {
+  id        String   @id @default(uuid())
+  folderId  Int
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+}
+
+model BlogPost {
+  id        Int           @id @default(autoincrement())
+  title     String        @db.VarChar(200)
+  content   String
+  published Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  authorId  Int
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments  BlogComment[]
+}
+
+model BlogComment {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(80)
+  text      String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  postId    Int
+  post      BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  Int?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+}
+
+model DirectMessage {
+  id          Int      @id @default(autoincrement())
+  text        String   @db.VarChar(2000)
+  createdAt   DateTime @default(now())
+  senderId    Int
+  sender      User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId Int
+  recipient   User     @relation("Recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, recipientId, createdAt])
+}
+
+model SocialPost {
+  id        Int             @id @default(autoincrement())
+  text      String          @db.VarChar(4000)
+  createdAt DateTime        @default(now())
+  authorId  Int
+  author    User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments  SocialComment[]
+  likes     Like[]
+}
+
+model SocialComment {
+  id        Int        @id @default(autoincrement())
+  text      String     @db.VarChar(2000)
+  createdAt DateTime   @default(now())
+  authorId  Int
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  postId    Int
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  userId Int
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId Int
+  post   SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+model Follow {
+  followerId  Int
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId Int
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  accepted    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+}
+
+model Hunt {
+  id          String    @id @default(uuid())
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  found       String[]  @default([])
+  playerName  String?   @db.VarChar(80)
+  elapsedMs   Int?
+}
