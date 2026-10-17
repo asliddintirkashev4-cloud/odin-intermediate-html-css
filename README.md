@@ -40,3 +40,8 @@ Browser checks and publication status are tracked separately; this repository do
 ## Restaurant Page
 - `restaurant.html` and `restaurant.bundle.js`: production build of the three-view restaurant project.
 - `restaurant/`: standalone Webpack source project, with dependencies, template, view modules and original SVG illustration.
+
+## Todo List
+- `todo.html`: projects, expandable and editable tasks, due dates, priorities and completion controls.
+- `todo-model.mjs`: Todo class, project collections, validation and versioned localStorage persistence. Restored tasks regain their class methods.
+- Run `node --test todo.test.mjs` for persistence, moving tasks between projects, deletion and validation checks.
