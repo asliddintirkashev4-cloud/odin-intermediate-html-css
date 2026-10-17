@@ -45,3 +45,12 @@ Browser checks and publication status are tracked separately; this repository do
 - `todo.html`: projects, expandable and editable tasks, due dates, priorities and completion controls.
 - `todo-model.mjs`: Todo class, project collections, validation and versioned localStorage persistence. Restored tasks regain their class methods.
 - Run `node --test todo.test.mjs` for persistence, moving tasks between projects, deletion and validation checks.
+
+## Algorithms and data structures
+- `recursion-fibonacci.mjs`: iterative and recursive Fibonacci sequences. Values use JavaScript numbers; very large sequences exceed integer precision.
+- `recursion-merge-sort.mjs`: recursive merge sort, preserving the input array.
+- `linked-list.mjs`: nodes, list operations and optional indexed insertion/removal. Following the current assignment, `pop()` removes the head and accessors return values.
+- `hash-map.mjs`: chained hash buckets, overwrite and removal, load-factor expansion, plus a HashSet.
+- `binary-search-tree.mjs`: balanced construction, node-based insertion/deletion, four callback traversals, height/depth and rebalancing.
+- `knights-travails.mjs`: breadth-first search over legal knight moves on an 8×8 board.
+- Run `node algorithms-demo.mjs` for the assignment drivers and `node --test algorithms.test.mjs` for known examples, boundary cases, collision/resize behavior, tree mutation and shortest-path checks.
