@@ -8,6 +8,10 @@ These exercises explore how a request becomes a useful application: routing, vie
 
 ![Workshop projects](screenshots/book.png)
 
+## Live projects
+
+[Open the server workshop](https://odin-server-workshop.onrender.com). The deployed projects use Render and Neon PostgreSQL. Free hosting can take about a minute to wake after inactivity.
+
 ## Run
 
 Use Node 22.18 or later and PostgreSQL 16 or later.
