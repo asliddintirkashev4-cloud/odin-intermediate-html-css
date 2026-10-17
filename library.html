@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Marginalia — A personal library</title><link rel="stylesheet" href="library.css"><script type="module" src="library.mjs"></script></head>
+<body>
+  <header><a class="brand" href="library.html">m.<span>Marginalia</span></a><a href="index.html">All projects ↗</a></header>
+  <main>
+    <div class="intro"><div><p class="eyebrow">A personal collection</p><h1>A little shelf.<br>A world of ideas.</h1><p>Keep the books you love close, and your next chapter closer.</p></div><button id="new-book" type="button">+ New book</button></div>
+    <div class="collection-header"><h2>Your collection <span id="total"></span></h2><div class="tools"><label class="sr-only" for="search">Search books</label><input type="search" id="search" placeholder="Search title or author"><label class="sr-only" for="read-filter">Filter books</label><select id="read-filter"><option value="all">All books</option><option value="unread">To read</option><option value="read">Finished</option></select></div></div>
+    <p class="sample-note">A few fictional books to start. Changes last until you reload this page.</p>
+    <div id="books" class="books" aria-label="Books"></div>
+    <p id="empty" hidden>No books here yet. Add one or adjust your search.</p>
+    <p id="status" role="status" class="sr-only"></p>
+  </main>
+  <footer><p>One book at a time.</p><p>Library · The Odin Project</p></footer>
+  <dialog id="book-dialog" aria-labelledby="form-title"><form id="book-form"><div class="dialog-heading"><h2 id="form-title">Make room for a book.</h2><button class="close" type="button" id="cancel" aria-label="Close new book">×</button></div><p>All fields except “Finished reading” are required.</p><label for="title">Title</label><input id="title" name="title" required maxlength="200"><label for="author">Author</label><input id="author" name="author" required maxlength="100"><label for="pages">Number of pages</label><input id="pages" name="pages" type="number" min="1" step="1" required><label class="checkbox"><input id="read" name="read" type="checkbox">Finished reading</label><p id="form-error" role="alert"></p><button type="submit">Add to collection</button></form></dialog>
+</body>
+</html>
