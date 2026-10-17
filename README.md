@@ -36,3 +36,7 @@ Browser checks and publication status are tracked separately; this repository do
 - `prototype-exercises.mjs`: four prototype-inheritance exercises; run with Node.js.
 
 - `tictactoe.html`: local two-player Tic Tac Toe. Board state and player objects live in factories; an IIFE owns the display controller. All eight winning lines, draws, occupied squares and game-over behavior are covered by tests. Run `node --test tictactoe.test.mjs`.
+
+## Restaurant Page
+- `restaurant.html` and `restaurant.bundle.js`: production build of the three-view restaurant project.
+- `restaurant/`: standalone Webpack source project, with dependencies, template, view modules and original SVG illustration.
