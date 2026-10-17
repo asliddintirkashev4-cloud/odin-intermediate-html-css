@@ -23,3 +23,8 @@ The forest and leaf SVG illustrations are original artwork created for these exe
 - https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Structuring_content/Planet_data_table
 
 Browser checks and publication status are tracked separately; this repository does not imply completion of the full Odin curriculum.
+
+## Additional exercises
+- `holy-basic.html`, `holy-responsive.html`, `holy-mockup.html`: CSS Grid exercises using The Odin Project starter markup. Starter license: `ODIN-EXERCISES-LICENSE`.
+- `selectors-1.html` to `selectors-5.html`: solutions demonstrating MDN selector tasks with equivalent sample text and the required DOM relationships.
+- `fonts.html`: the MDN starting page with locally hosted WOFF2 fonts and original CSS additions. Source: https://github.com/mdn/learning-area/tree/main/css/web-fonts . The source sample license is included as `MDN-SAMPLE-LICENSE.txt`; Zantroke’s font license is `ZANTROKE-LICENSE.txt`. Font files are the assets supplied with the MDN exercise.
