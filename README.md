@@ -31,7 +31,7 @@ Browser checks and publication status are tracked separately; this repository do
 
 ## JavaScript
 - `library.html`: Library project. The array of book objects is separate from rendering. Each book has a UUID; a prototype method toggles its reading status. Books can be added and removed by ID. State lasts for the current page session.
-- `library-model.mjs`: book constructor and collection functions.
+- `library-model.mjs`: Book class and collection functions.
 - Run `node --test library.test.mjs` for model checks.
 - `prototype-exercises.mjs`: four prototype-inheritance exercises; run with Node.js.
 
@@ -67,7 +67,7 @@ Browser checks and publication status are tracked separately; this repository do
 `battleship/` contains a complete browser game and its standalone Jest/Babel source project. Shuffle a legal fleet, start a game, attack the computer and play until a fleet sinks. The boards lock after a win. Model tests cover fleet placement, turns, repeated shots and both outcomes.
 
 ## API projects
-- `weather.html`: Visual Crossing location forecasts, local Celsius/Fahrenheit conversion, weather themes, loading/error states and clearly labeled sample data. Enter your own key to request live data. The key is never hardcoded or saved. `weather-api.mjs` separates retrieval from normalization; `weather.test.mjs` tests normalization, URL encoding and error handling using controlled responses. Live forecast verification still requires an API key.
+- `weather.html`: Visual Crossing location forecasts, local Celsius/Fahrenheit conversion, weather themes, loading/error states and clearly labeled sample data. Enter your own key to request live data. The key is never hardcoded or saved. `weather-api.mjs` separates retrieval from normalization; `weather.test.mjs` tests normalization, URL encoding and error handling using controlled responses. Live forecasts were verified in the browser for Tashkent and London, including Celsius/Fahrenheit conversion. Each visitor supplies their own key.
 - `giphy.html`: tagged GIF lookup, another-image button, promise chains and non-success HTTP handling. A GIPHY key is required. `giphy.test.mjs` checks response processing and errors using controlled responses. Live GIF verification remains pending a key.
 
 ## Advanced HTML and CSS
@@ -76,3 +76,11 @@ Browser checks and publication status are tracked separately; this repository do
 - `animation-menu.html`: top-origin keyframe expansion with an intermediate overshoot.
 The animation starters come from The Odin Project CSS exercises; the starter license is included. Reduced-motion preferences disable the added movement.
 - `portfolio.html`: responsive portfolio following the three Homepage assignment layouts, with an original SVG workspace illustration and actual project screenshots. Six projects link to their source and live pages. Contact links point to the public GitHub profile. No private contact details are published. The layout was checked in 320, 768 and 1920 px frames: one, two and three project columns respectively, with no horizontal overflow or missing images. A skip link, semantic sections, descriptive link names, image alternatives and visible focus styles support keyboard and assistive-technology use.
+
+## React
+- `react-cv/`: Papertrail CV Application. Components and styles live under `src/`; a source template and Vite configuration reproduce the production bundle. Saving displays HTML, editing restores values, and reversed experience dates are rejected.
+- `react-memory/`: Pocket Recall. Twelve cards load from PokéAPI and shuffle on load and after every pick. Repeated picks lose; twelve unique picks win; the best score persists locally. Three rules tests and full browser win/loss flows pass.
+- `react-shop/`: Commonplace. Home, shop and bag routes use React Router; a real FakeStore API catalog supplies products. Context and a reducer maintain cart quantities and integer-cent totals. Six React Testing Library flows and browser checks cover additions, edits, removal, filters, retry and route reload.
+- `react-practice/`: routed component and state exercises, including named exports, live name fields, a background-change counter, editable class tasks with Count, nested context, recipient drafts and a useReducer-style hook built from useState. Three React Testing Library flows pass.
+
+Each React directory contains its own package manifest and lockfile. Run `npm ci` and `npm run build` in that directory. The source template is `app.html`; its built output is published as `index.html` alongside the JS and CSS bundles. Relative asset paths and hash-based routes support Pages hosting.
