@@ -59,3 +59,6 @@ Browser checks and publication status are tracked separately; this repository do
 `validation.html` uses live inline Constraint Validation API checks for email, country-dependent postal codes and matching passwords. The form has `novalidate`; JavaScript checks every field, announces errors, and reports success locally. Library includes custom required-field errors developed on a feature branch.
 
 `testing-practice/` contains the Jest/Babel project. Run `npm ci && npm test` inside that directory.
+
+## Recursive methods practice
+`factorial.js`, `contains.js`, `totalIntegers.js`, `permutations.js` and `pascal.js` solve the five official recursion exercises. The accompanying `.spec.js` files are the supplied tests with skipped cases enabled (43 tests). Exercise test license: `ODIN-EXERCISES-LICENSE`. Run them with Jest, for example `cd testing-practice && npm ci && npx jest --rootDir .. --testRegex "(factorial|contains|totalIntegers|permutations|pascal)\\.spec\\.js$" --runInBand`.
