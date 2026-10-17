@@ -69,3 +69,10 @@ Browser checks and publication status are tracked separately; this repository do
 ## API projects
 - `weather.html`: Visual Crossing location forecasts, local Celsius/Fahrenheit conversion, weather themes, loading/error states and clearly labeled sample data. Enter your own key to request live data. The key is never hardcoded or saved. `weather-api.mjs` separates retrieval from normalization; `weather.test.mjs` tests normalization, URL encoding and error handling using controlled responses. Live forecast verification still requires an API key.
 - `giphy.html`: tagged GIF lookup, another-image button, promise chains and non-success HTTP handling. A GIPHY key is required. `giphy.test.mjs` checks response processing and errors using controlled responses. Live GIF verification remains pending a key.
+
+## Advanced HTML and CSS
+- `animation-button.html`: transform-only hover transition.
+- `animation-popup.html`: sliding and fading modal, with reverse transition on close.
+- `animation-menu.html`: top-origin keyframe expansion with an intermediate overshoot.
+The animation starters come from The Odin Project CSS exercises; the starter license is included. Reduced-motion preferences disable the added movement.
+- `portfolio.html`: responsive portfolio following the three Homepage assignment layouts, with an original SVG workspace illustration and actual project screenshots. Six projects link to their source and live pages. Contact links point to the public GitHub profile. No private contact details are published. The layout was checked in 320, 768 and 1920 px frames: one, two and three project columns respectively, with no horizontal overflow or missing images. A skip link, semantic sections, descriptive link names, image alternatives and visible focus styles support keyboard and assistive-technology use.
