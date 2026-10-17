@@ -54,3 +54,8 @@ Browser checks and publication status are tracked separately; this repository do
 - `binary-search-tree.mjs`: balanced construction, node-based insertion/deletion, four callback traversals, height/depth and rebalancing.
 - `knights-travails.mjs`: breadth-first search over legal knight moves on an 8×8 board.
 - Run `node algorithms-demo.mjs` for the assignment drivers and `node --test algorithms.test.mjs` for known examples, boundary cases, collision/resize behavior, tree mutation and shortest-path checks.
+
+## Form validation
+`validation.html` uses live inline Constraint Validation API checks for email, country-dependent postal codes and matching passwords. The form has `novalidate`; JavaScript checks every field, announces errors, and reports success locally. Library includes custom required-field errors developed on a feature branch.
+
+`testing-practice/` contains the Jest/Babel project. Run `npm ci && npm test` inside that directory.

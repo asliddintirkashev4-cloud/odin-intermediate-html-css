@@ -10,6 +10,25 @@ const filter = document.querySelector('#read-filter');
 const dialog = document.querySelector('#book-dialog');
 const form = document.querySelector('#book-form');
 const status = document.querySelector('#status');
+form.noValidate = true;
+const bookFields = ['title', 'author', 'pages'].map(name => form.elements[name]);
+function validateBookField(field) {
+  field.setCustomValidity('');
+  const labels = {title: 'The book title', author: 'The author name', pages: 'The page count'};
+  let message = '';
+  if (!field.value.trim()) message = `${labels[field.name]} must be filled!`;
+  else if (field.name === 'pages' && (!Number.isInteger(Number(field.value)) || Number(field.value) < 1)) message = 'Enter a positive whole number of pages.';
+  else if (field.maxLength > 0 && field.value.length > field.maxLength) message = `Use at most ${field.maxLength} characters.`;
+  field.setCustomValidity(message);
+  field.setAttribute('aria-invalid', String(Boolean(message)));
+  return message;
+}
+for (const field of bookFields) {
+  field.addEventListener('input', () => {
+    validateBookField(field);
+    document.querySelector('#form-error').textContent = bookFields.map(validateBookField).filter(Boolean).join(' ');
+  });
+}
 
 function renderLibrary() {
   books.replaceChildren();
@@ -55,12 +74,19 @@ document.querySelector('#new-book').addEventListener('click', () => dialog.showM
 document.querySelector('#cancel').addEventListener('click', () => dialog.close());
 form.addEventListener('submit', event => {
   event.preventDefault();
+  const errors = bookFields.map(validateBookField).filter(Boolean);
+  if (errors.length) {
+    document.querySelector('#form-error').textContent = errors.join(' ');
+    bookFields.find(field => !field.validity.valid)?.focus();
+    return;
+  }
   try {
     const book = addBookToLibrary(myLibrary, form.elements.title.value, form.elements.author.value, form.elements.pages.value, form.elements.read.checked);
     search.value = '';
     filter.value = 'all';
     renderLibrary();
     form.reset();
+    bookFields.forEach(field => field.removeAttribute('aria-invalid'));
     document.querySelector('#form-error').textContent = '';
     dialog.close();
     status.textContent = `Added ${book.title} to the collection.`;
