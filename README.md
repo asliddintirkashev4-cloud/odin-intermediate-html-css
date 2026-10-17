@@ -96,7 +96,7 @@ Each React directory contains its own package manifest and lockfile. Run `npm ci
 `sql/` contains verified SQL Teaching, SQLBolt and SQL Zoo queries and SQL Zoo quiz results.
 
 ## NodeJS
-`node/` contains nine server projects, shared account validation, PostgreSQL migrations, seed scripts, integration tests and screenshots. See [the server workshop instructions](node/README.md). The source is ready for a Node host; GitHub Pages serves static files only.
+`node/` contains nine server projects, shared account validation, PostgreSQL migrations, seed scripts, integration tests and screenshots. See [the server workshop instructions](node/README.md). [Open the live server workshop](https://odin-server-workshop.onrender.com). The application runs on Render with PostgreSQL on Neon; GitHub Pages hosts the static coursework. Free Render instances can take about a minute to wake after inactivity.
 
 ## Portfolio and resume
 `portfolio.html` introduces Asliddin Tirkashev and links to live coursework and source. `resume.html` is an accessible web resume; `resume.pdf` is the one-page PDF.
