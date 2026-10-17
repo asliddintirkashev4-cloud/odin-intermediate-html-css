@@ -1,0 +1,1 @@
+<%- include('../views/header') %><article><h2><%= message.user %></h2><time datetime="<%= message.added.toISOString() %>"><%= message.added.toLocaleString('en-GB') %></time><p><%= message.text %></p></article><a href="<%= base %>/">All messages</a><%- include('../views/footer') %>
