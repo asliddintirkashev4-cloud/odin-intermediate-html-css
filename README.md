@@ -62,3 +62,10 @@ Browser checks and publication status are tracked separately; this repository do
 
 ## Recursive methods practice
 `factorial.js`, `contains.js`, `totalIntegers.js`, `permutations.js` and `pascal.js` solve the five official recursion exercises. The accompanying `.spec.js` files are the supplied tests with skipped cases enabled (43 tests). Exercise test license: `ODIN-EXERCISES-LICENSE`. Run them with Jest, for example `cd testing-practice && npm ci && npx jest --rootDir .. --testRegex "(factorial|contains|totalIntegers|permutations|pascal)\\.spec\\.js$" --runInBand`.
+
+## Battleship
+`battleship/` contains a complete browser game and its standalone Jest/Babel source project. Shuffle a legal fleet, start a game, attack the computer and play until a fleet sinks. The boards lock after a win. Model tests cover fleet placement, turns, repeated shots and both outcomes.
+
+## API projects
+- `weather.html`: Visual Crossing location forecasts, local Celsius/Fahrenheit conversion, weather themes, loading/error states and clearly labeled sample data. Enter your own key to request live data. The key is never hardcoded or saved. `weather-api.mjs` separates retrieval from normalization; `weather.test.mjs` tests normalization, URL encoding and error handling using controlled responses. Live forecast verification still requires an API key.
+- `giphy.html`: tagged GIF lookup, another-image button, promise chains and non-success HTTP handling. A GIPHY key is required. `giphy.test.mjs` checks response processing and errors using controlled responses. Live GIF verification remains pending a key.
