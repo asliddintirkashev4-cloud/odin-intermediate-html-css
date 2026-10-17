@@ -1,0 +1,53 @@
+import { testDatabaseUrl } from './database.js';
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import pg from 'pg';
+import request from 'supertest';
+import bcrypt from 'bcrypt';
+import { createApp } from '../app.js';
+import { createPrisma } from '../lib/prisma.js';
+
+const db = new pg.Pool({ connectionString: testDatabaseUrl() });
+const prisma = createPrisma(testDatabaseUrl());
+const app = createApp(db, { prisma, adminPasscode: 'test-admin-only', membersPasscode: 'test-member-only' });
+async function form(agent, path, data, status = 303, origin) {
+  const page = await agent.get('/members/login');
+  const csrf = page.text.match(/name="csrf-token" content="([a-f0-9]+)"/)[1];
+  const req = agent.post(path).type('form').send({ ...data, _csrf: csrf });
+  if (origin) req.set('Origin', origin);
+  const result = await req;
+  assert.equal(result.status, status, result.text.slice(0, 400));
+  return result;
+}
+after(async () => { for (const store of app.locals.sessionStores) { await store.shutdown?.(); store.close?.(); } await prisma.$disconnect(); await db.end(); });
+test('members sign up as nonmembers, authenticate, join and enforce moderator permissions', async () => {
+  const agent = request.agent(app);
+  const email = 'test-' + Date.now() + '@example.test';
+  const password = 'Learning-Account-123';
+  const signup = { firstName: 'Hidden', lastName: 'Author', email, password, confirmPassword: password };
+  await request(app).get('/members/new').expect(302).expect('Location', '/members/login');
+  await form(agent, '/members/signup', { ...signup, confirmPassword: 'wrong' }, 400);
+  await form(agent, '/members/signup', { ...signup, admin: 'true', member: 'true' }, 303, 'null');
+  const user = await prisma.user.findUnique({ where: { email } });
+  assert.equal(user.admin, false);
+  assert.equal(user.member, false);
+  assert.notEqual(user.passwordHash, password);
+  assert.equal(await bcrypt.compare(password, user.passwordHash), true);
+  await form(agent, '/members/new', { title: 'Club test', text: 'A useful thought.' });
+  const message = await prisma.clubMessage.findFirst({ where: { authorId: user.id } });
+  await request(app).get('/members/').expect(200).expect(/A useful thought/).expect(response => assert.ok(!response.text.includes('Hidden Author')));
+  await form(agent, '/members/messages/' + message.id + '/delete', {}, 403);
+  await form(agent, '/members/join', { role: 'member', passcode: 'wrong' }, 403);
+  await form(agent, '/members/join', { role: 'member', passcode: 'test-member-only' });
+  await agent.get('/members/').expect(200).expect(/Hidden Author/);
+  await form(agent, '/members/join', { role: 'admin', passcode: 'test-admin-only' });
+  await form(agent, '/members/messages/' + message.id + '/delete', {});
+  await form(agent, '/members/logout', {});
+  await agent.get('/members/new').expect(302);
+  await form(agent, '/members/login', { email, password: 'wrong' }, 401);
+  await form(agent, '/members/login', { email, password });
+  await agent.get('/members/profile').expect(200).expect(/Hidden/);
+  await form(agent, '/members/profile', { firstName: 'Changed' }, 403, 'https://unrelated.example');
+  await agent.post('/members/new').type('form').send({ title: 'Without token', text: 'Rejected' }).expect(403);
+  await prisma.user.delete({ where: { id: user.id } });
+});
