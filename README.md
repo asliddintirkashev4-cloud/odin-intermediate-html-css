@@ -1,6 +1,13 @@
 # The Odin Project — Coursework
 
-This repository contains HTML, CSS and JavaScript projects and practice exercises.
+This repository follows The Odin Project Full Stack JavaScript path: responsive HTML/CSS, JavaScript applications, React, SQL and Node.js.
+
+## Why these projects
+Each project explores a practical part of web development, from semantic forms and isolated game rules to state, data persistence and authenticated server routes. The collection is a record of learning by building and checking complete flows.
+
+![Shopping cart project](portfolio-react-shop.png)
+
+[Browse the portfolio](https://asliddintirkashev4-cloud.github.io/odin-intermediate-html-css/portfolio.html) or open the project files below.
 
 ## Projects
 - `signup.html`: Fern & Field registration form. Semantic labels, required fields, email and length validation, password confirmation, blue focus states and invalid field styling. Local demo only; data is never submitted or stored.
@@ -11,7 +18,7 @@ This repository contains HTML, CSS and JavaScript projects and practice exercise
 - `planets.html`: MDN planet table challenge, using the historical exercise dataset.
 
 ## Run
-Open `index.html` or serve this folder with `python3 -m http.server 8765`. No build tools or dependencies required.
+Open `index.html` or serve this folder with `python3 -m http.server 8765`. The static pages need no build step. Source projects such as React, Webpack and Node.js have their own dependency and run instructions.
 
 ## Assets
 The forest and leaf SVG illustrations are original artwork created for these exercises. The sign-up wordmark uses Cormorant Garamond via Google Fonts, with Georgia as the offline fallback. No third-party photographs are included.
@@ -84,3 +91,12 @@ The animation starters come from The Odin Project CSS exercises; the starter lic
 - `react-practice/`: routed component and state exercises, including named exports, live name fields, a background-change counter, editable class tasks with Count, nested context, recipient drafts and a useReducer-style hook built from useState. Three React Testing Library flows pass.
 
 Each React directory contains its own package manifest and lockfile. Run `npm ci` and `npm run build` in that directory. The source template is `app.html`; its built output is published as `index.html` alongside the JS and CSS bundles. Relative asset paths and hash-based routes support Pages hosting.
+
+## SQL
+`sql/` contains verified SQL Teaching, SQLBolt and SQL Zoo queries and SQL Zoo quiz results.
+
+## NodeJS
+`node/` contains nine server projects, shared account validation, PostgreSQL migrations, seed scripts, integration tests and screenshots. See [the server workshop instructions](node/README.md). The source is ready for a Node host; GitHub Pages serves static files only.
+
+## Portfolio and resume
+`portfolio.html` introduces Asliddin Tirkashev and links to live coursework and source. `resume.html` is an accessible web resume; `resume.pdf` is the one-page PDF.

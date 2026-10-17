@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: odin-server-workshop
+    runtime: node
+    plan: free
+    rootDir: node
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run prisma:migrate && npm run db:setup
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      - key: FILE_STORAGE
+        value: database
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MEMBERS_PASSCODE
+        generateValue: true
+      - key: ADMIN_PASSCODE
+        generateValue: true
