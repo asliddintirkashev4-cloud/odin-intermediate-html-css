@@ -34,3 +34,5 @@ Browser checks and publication status are tracked separately; this repository do
 - `library-model.mjs`: book constructor and collection functions.
 - Run `node --test library.test.mjs` for model checks.
 - `prototype-exercises.mjs`: four prototype-inheritance exercises; run with Node.js.
+
+- `tictactoe.html`: local two-player Tic Tac Toe. Board state and player objects live in factories; an IIFE owns the display controller. All eight winning lines, draws, occupied squares and game-over behavior are covered by tests. Run `node --test tictactoe.test.mjs`.
