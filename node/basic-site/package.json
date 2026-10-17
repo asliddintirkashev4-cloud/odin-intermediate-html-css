@@ -1,0 +1,13 @@
+{
+  "name": "odin-basic-informational-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "start:express": "node express.js"
+  },
+  "dependencies": {
+    "express": "5.3.0"
+  }
+}
