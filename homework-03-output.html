@@ -1,0 +1,754 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Retrieval evaluation / Asliddin Tirkashev</title><link rel="stylesheet" href="profile-coursework.css"><body class="output-page"><main><a href="portfolio.html#homework">Back to homework</a><h1>Practice 01 / Retrieval evaluation</h1><p>Six retrieval configurations on twenty-five incidents, including the weakest cases.</p><p>Saved coursework outputs from 4 November 2026. This page does not rerun the model experiments.</p><a href="homework-03.ipynb" download>Download notebook</a><article><h2>Code cell 4</h2><details><summary>Show code</summary><pre><code>import importlib.metadata, subprocess, sys
+PACKAGES = {
+    &#x27;requests&#x27;: &#x27;2.32.5&#x27;, &#x27;numpy&#x27;: &#x27;2.3.5&#x27;, &#x27;pandas&#x27;: &#x27;2.2.3&#x27;,
+    &#x27;pydantic&#x27;: &#x27;2.14.1&#x27;, &#x27;faiss-cpu&#x27;: &#x27;1.15.1&#x27;, &#x27;tabulate&#x27;: &#x27;0.10.0&#x27;,
+    &#x27;langchain&#x27;: &#x27;1.0.2&#x27;, &#x27;langchain-ollama&#x27;: &#x27;1.1.0&#x27;
+}
+if &#x27;google.colab&#x27; in sys.modules:
+    subprocess.check_call([sys.executable, &#x27;-m&#x27;, &#x27;pip&#x27;, &#x27;install&#x27;, &#x27;-q&#x27;] + [f&#x27;{k}=={v}&#x27; for k,v in PACKAGES.items()])
+for package in PACKAGES:
+    print(package, importlib.metadata.version(package))
+</code></pre></details><h3>Saved output</h3><pre>requests 2.32.5
+numpy 2.3.5
+pandas 2.2.3
+pydantic 2.14.1
+faiss-cpu 1.15.1
+tabulate 0.10.0
+langchain 1.0.2
+langchain-ollama 1.1.0
+</pre></article><article><h2>Code cell 6</h2><details><summary>Show code</summary><pre><code>import os, pathlib, importlib.util
+try:
+    IN_COLAB = importlib.util.find_spec(&#x27;google.colab&#x27;) is not None
+except ModuleNotFoundError:
+    IN_COLAB = False
+TRACK = os.environ.get(&#x27;GENAI_TRACK&#x27;, &#x27;CPU&#x27;).upper()
+os.environ[&#x27;GENAI_TRACK&#x27;] = TRACK
+USE_DRIVE = False
+PRACTICE = &#x27;P1&#x27;
+MODEL = os.environ.get(&#x27;GENAI_MODEL&#x27;, &#x27;qwen3:1.7b-q4_K_M&#x27;)
+OLLAMA_URL = os.environ.get(&#x27;GENAI_OLLAMA_URL&#x27;, &#x27;http://localhost:11434&#x27;)
+os.environ[&#x27;GENAI_OLLAMA_URL&#x27;] = OLLAMA_URL
+OLLAMA_BIN = &#x27;ollama&#x27;
+CONTENT = pathlib.Path(&#x27;/content&#x27;) if IN_COLAB else pathlib.Path.cwd()
+BASE = CONTENT
+print(&#x27;Track:&#x27;, TRACK, &#x27;| model:&#x27;, MODEL)
+</code></pre></details><h3>Saved output</h3><pre>Track: CPU | model: qwen3:1.7b-q4_K_M
+</pre></article><article><h2>Code cell 8</h2><details><summary>Show code</summary><pre><code>import platform, shutil, subprocess
+print(&#x27;Runtime:&#x27;, platform.platform())
+if shutil.which(&#x27;nvidia-smi&#x27;):
+    print(subprocess.run([&#x27;nvidia-smi&#x27;, &#x27;--query-gpu=name,memory.total&#x27;, &#x27;--format=csv,noheader&#x27;], capture_output=True, text=True).stdout)
+print(&#x27;Selected track:&#x27;, TRACK, &#x27;| num_gpu:&#x27;, os.environ.get(&#x27;GENAI_NUM_GPU&#x27;, &#x27;99&#x27; if TRACK == &#x27;GPU&#x27; else &#x27;0&#x27;))
+</code></pre></details><h3>Saved output</h3><pre>Runtime: macOS-26.5.1-arm64-arm-64bit
+Selected track: CPU | num_gpu: 0
+</pre></article><article><h2>Code cell 10</h2><details><summary>Show code</summary><pre><code>import json, os, shutil, zipfile
+DATA = pathlib.Path(os.environ.get(&#x27;GENAI_DATA&#x27;, str(CONTENT / &#x27;chaoscorp&#x27;)))
+if not DATA.exists():
+    for candidate in [CONTENT.parent / &#x27;data/chaoscorp&#x27;, CONTENT / &#x27;data/chaoscorp&#x27;]:
+        if candidate.exists(): DATA = candidate; break
+if USE_DRIVE:
+    from google.colab import drive
+    drive.mount(&#x27;/content/drive&#x27;)
+    BASE = pathlib.Path(&#x27;/content/drive/MyDrive/genai_course&#x27;)
+if not DATA.exists():
+    from google.colab import files
+    uploaded = files.upload()
+    zip_path = next(iter(uploaded))
+    with zipfile.ZipFile(zip_path) as z:
+        assert &#x27;chaoscorp/README.md&#x27; in z.namelist()
+        z.extractall(CONTENT)
+    DATA = CONTENT / &#x27;chaoscorp&#x27;
+print(&#x27;Data directory:&#x27;, DATA.name)
+print(&#x27;Data files:&#x27;, sorted(p.name for p in DATA.iterdir()))
+</code></pre></details><h3>Saved output</h3><pre>Data directory: chaoscorp
+Data files: [&#x27;README.md&#x27;, &#x27;adversarial.json&#x27;, &#x27;incidents_dev.json&#x27;, &#x27;incidents_original10.json&#x27;, &#x27;incidents_test.json&#x27;, &#x27;p3_datasets&#x27;, &#x27;policies&#x27;, &#x27;runbooks&#x27;, &#x27;schema_v2.json&#x27;, &#x27;services.json&#x27;]
+</pre></article><article><h2>Code cell 12</h2><details><summary>Show code</summary><pre><code>import requests, subprocess, time, shutil
+try:
+    print(&#x27;Ollama:&#x27;, requests.get(OLLAMA_URL + &#x27;/api/version&#x27;, timeout=10).json())
+except requests.RequestException:
+    if not shutil.which(&#x27;ollama&#x27;):
+        if not pathlib.Path(&#x27;/content&#x27;).exists(): raise RuntimeError(&#x27;Install Ollama from its official site before running locally.&#x27;)
+        subprocess.check_call([&#x27;bash&#x27;, &#x27;-lc&#x27;, &#x27;apt-get -qq install -y zstd pciutils &gt; /dev/null &amp;&amp; curl -fsSL https://ollama.com/install.sh | sh&#x27;])
+    ollama = subprocess.Popen([OLLAMA_BIN, &#x27;serve&#x27;], stdout=open(str(CONTENT / &#x27;ollama.log&#x27;), &#x27;w&#x27;), stderr=subprocess.STDOUT)
+    for _ in range(60):
+        try:
+            requests.get(OLLAMA_URL + &#x27;/api/version&#x27;, timeout=2).raise_for_status(); break
+        except requests.RequestException: time.sleep(1)
+    else: raise RuntimeError(&#x27;Ollama did not start&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>Ollama: {&#x27;version&#x27;: &#x27;0.17.4&#x27;}
+</pre></article><article><h2>Code cell 14</h2><details><summary>Show code</summary><pre><code>import json, os, time, requests
+
+RESULTS = pathlib.Path(os.environ.get(&quot;GENAI_P1_RESULTS&quot;, str(BASE / &quot;results&quot; / PRACTICE if IN_COLAB or USE_DRIVE else CONTENT / &quot;results&quot;)))
+RESULTS.mkdir(parents=True, exist_ok=True)
+
+def pull(model):
+    &quot;&quot;&quot;Download a model (skips if already present).&quot;&quot;&quot;
+    r = requests.post(OLLAMA_URL + &quot;/api/pull&quot;, json={&quot;model&quot;: model, &quot;stream&quot;: False}, timeout=3600)
+    r.raise_for_status()
+    return r.json().get(&quot;status&quot;)
+
+def chat(messages, model=None, fmt=None, options=None):
+    &quot;&quot;&quot;One LLM call. Returns (answer_text, full_response). fmt: None, &quot;json&quot; or a JSON schema.&quot;&quot;&quot;
+    model = model or MODEL
+    body = {&quot;model&quot;: model, &quot;messages&quot;: messages, &quot;stream&quot;: False,
+            &quot;options&quot;: {&quot;temperature&quot;: 0, &quot;seed&quot;: 42, &quot;num_ctx&quot;: 4096 if TRACK == &quot;GPU&quot; else 2048, &quot;num_predict&quot;: 256 if TRACK == &quot;GPU&quot; else 200, &quot;num_gpu&quot;: int(os.environ.get(&quot;GENAI_NUM_GPU&quot;, &quot;99&quot; if TRACK == &quot;GPU&quot; else &quot;0&quot;)), **(options or {})}}
+    if model.startswith(&quot;qwen3&quot;):
+        body[&quot;think&quot;] = False          # no hidden reasoning tokens
+    if fmt is not None:
+        body[&quot;format&quot;] = fmt
+    r = requests.post(OLLAMA_URL + &quot;/api/chat&quot;, json=body, timeout=900)
+    r.raise_for_status()
+    resp = r.json()
+    return resp[&quot;message&quot;][&quot;content&quot;], resp
+
+def loaded_models():
+    &quot;&quot;&quot;What is in memory now, and which share of it is on the GPU (like `ollama ps`).&quot;&quot;&quot;
+    out = []
+    for m in requests.get(OLLAMA_URL + &quot;/api/ps&quot;, timeout=10).json().get(&quot;models&quot;, []):
+        size, vram = m.get(&quot;size&quot;, 0), m.get(&quot;size_vram&quot;, 0)
+        out.append({&quot;model&quot;: m[&quot;name&quot;], &quot;size_gb&quot;: round(size / 1e9, 2), &quot;gpu_share&quot;: round(vram / size, 2) if size else 0.0})
+    return out
+
+def unload(model):
+    &quot;&quot;&quot;Remove a model from memory (like `ollama stop`).&quot;&quot;&quot;
+    requests.post(OLLAMA_URL + &quot;/api/generate&quot;, json={&quot;model&quot;: model, &quot;keep_alive&quot;: 0}, timeout=60)
+
+def append_jsonl(path, record):
+    &quot;&quot;&quot;Save one finished result immediately (survives disconnects if USE_DRIVE).&quot;&quot;&quot;
+    with open(path, &quot;a&quot;, encoding=&quot;utf-8&quot;) as f:
+        f.write(json.dumps(record, ensure_ascii=False) + &quot;\n&quot;)
+
+def read_jsonl(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding=&quot;utf-8&quot;) as f:
+        return [json.loads(l) for l in f if l.strip()]
+
+pull(MODEL)
+text, resp = chat([{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Say hello in five words.&quot;}])
+print(text)
+print(&quot;decode tok/s:&quot;, round(resp[&quot;eval_count&quot;] / (resp[&quot;eval_duration&quot;] / 1e9), 1))
+</code></pre></details><h3>Saved output</h3><pre>Hello, world!
+decode tok/s: 165.0
+</pre></article><article><h2>Code cell 17</h2><details><summary>Show code</summary><pre><code>card_candidates = [BASE / &#x27;results/L1/model_card.json&#x27;, CONTENT.parent / &#x27;l1/results/model_card.json&#x27;]
+for card in card_candidates:
+    if card.exists():
+        MODEL = json.loads(card.read_text())[&#x27;model&#x27;]; print(&#x27;Model card found:&#x27;, card.name); break
+pull(MODEL)
+print(&#x27;This practice uses:&#x27;, MODEL)
+import hashlib
+_files = sorted((DATA/&#x27;runbooks&#x27;).glob(&#x27;*.md&#x27;)) + sorted((DATA/&#x27;policies&#x27;).glob(&#x27;*.md&#x27;))
+_files += [DATA/name for name in [&#x27;incidents_test.json&#x27;,&#x27;services.json&#x27;]]
+_data_hash = hashlib.sha256(b&#x27;&#x27;.join(p.name.encode()+p.read_bytes() for p in _files)).hexdigest()
+_identity = {&#x27;model&#x27;:MODEL,&#x27;embedding_model&#x27;:&#x27;nomic-embed-text&#x27;,&#x27;data_sha256&#x27;:_data_hash,
+             &#x27;own_size&#x27;:350,&#x27;own_overlap&#x27;:60,&#x27;track&#x27;:TRACK,&#x27;num_ctx&#x27;:4096 if TRACK==&#x27;GPU&#x27; else 2048,
+             &#x27;num_predict&#x27;:256 if TRACK==&#x27;GPU&#x27; else 200,&#x27;seed&#x27;:42,&#x27;temperature&#x27;:0,
+             &#x27;num_gpu&#x27;:int(os.environ.get(&#x27;GENAI_NUM_GPU&#x27;,&#x27;99&#x27; if TRACK==&#x27;GPU&#x27; else &#x27;0&#x27;))}
+_identity_path = RESULTS/&#x27;experiment_identity.json&#x27;
+if _identity_path.exists() and json.loads(_identity_path.read_text()) != _identity:
+    raise ValueError(&#x27;Saved results use a different model/data configuration. Select a fresh GENAI_P1_RESULTS directory.&#x27;)
+_identity_path.write_text(json.dumps(_identity,indent=2))
+</code></pre></details><h3>Saved output</h3><pre>Model card found: model_card.json
+
+This practice uses: qwen3:1.7b-q4_K_M
+
+309</pre></article><article><h2>Code cell 19</h2><details><summary>Show code</summary><pre><code>import re
+
+def load_corpus():
+    &quot;&quot;&quot;All runbooks and policies as documents with their sections (character offsets in the document text).&quot;&quot;&quot;
+    docs = []
+    for path in sorted((DATA / &quot;runbooks&quot;).glob(&quot;*.md&quot;)) + sorted((DATA / &quot;policies&quot;).glob(&quot;*.md&quot;)):
+        text = path.read_text()
+        doc_id = re.search(r&quot;^doc_id: (.+)$&quot;, text, re.M).group(1).strip()
+        m = re.search(r&quot;^service_name: (.+)$&quot;, text, re.M)
+        service = m.group(1).strip() if m else &quot;POLICY&quot;
+        heads = list(re.finditer(r&quot;^## (s\d+_[a-z_]+) — (.+)$&quot;, text, re.M))
+        sections = [{&quot;section_id&quot;: h.group(1), &quot;title&quot;: h.group(2), &quot;start&quot;: h.start(),
+                     &quot;end&quot;: heads[i + 1].start() if i + 1 &lt; len(heads) else len(text)} for i, h in enumerate(heads)]
+        docs.append({&quot;doc_id&quot;: doc_id, &quot;service_name&quot;: service, &quot;text&quot;: text, &quot;sections&quot;: sections})
+    return docs
+
+def sections_overlapping(doc, start, end):
+    &quot;&quot;&quot;Section IDs of `doc` that overlap the character span [start, end).&quot;&quot;&quot;
+    return [s[&quot;section_id&quot;] for s in doc[&quot;sections&quot;] if s[&quot;start&quot;] &lt; end and start &lt; s[&quot;end&quot;]]
+
+DOCS = load_corpus()
+DOC_BY_ID = {d[&quot;doc_id&quot;]: d for d in DOCS}
+DISTRACTORS = {&quot;runbook_paymentgateway_v1_deprecated&quot;, &quot;runbook_payment_reporting&quot;, &quot;guide_platform_k8s_operations&quot;}
+SERVICE_NAMES = sorted({d[&quot;service_name&quot;] for d in DOCS} - {&quot;POLICY&quot;, &quot;ALL&quot;, &quot;PaymentGateway_v1&quot;, &quot;payment-reporting&quot;})
+print(len(DOCS), &quot;documents,&quot;, sum(len(d[&quot;sections&quot;]) for d in DOCS), &quot;sections&quot;)
+
+import pandas as pd
+def kind(d):
+    return &quot;distractor&quot; if d[&quot;doc_id&quot;] in DISTRACTORS else (&quot;policy&quot; if d[&quot;service_name&quot;] == &quot;POLICY&quot; else &quot;service runbook&quot;)
+display(pd.DataFrame([{&quot;doc_id&quot;: d[&quot;doc_id&quot;], &quot;kind&quot;: kind(d), &quot;service&quot;: d[&quot;service_name&quot;], &quot;sections&quot;: len(d[&quot;sections&quot;]),
+                       &quot;characters&quot;: len(d[&quot;text&quot;])} for d in DOCS]).sort_values(&quot;kind&quot;))</code></pre></details><h3>Saved output</h3><pre>16 documents, 87 sections
+
+                                  doc_id             kind             service  \
+0          guide_platform_k8s_operations       distractor                 ALL   
+7              runbook_payment_reporting       distractor   payment-reporting   
+8   runbook_paymentgateway_v1_deprecated       distractor   PaymentGateway_v1   
+13                     policy_escalation           policy              POLICY   
+14                       policy_security           policy              POLICY   
+15                       policy_severity           policy              POLICY   
+1                     runbook_authserver  service runbook          AuthServer   
+2               runbook_database_cluster  service runbook     DatabaseCluster   
+3                  runbook_emailnotifier  service runbook       EmailNotifier   
+4                 runbook_frontend_react  service runbook      Frontend_React   
+5                   runbook_inventoryapi  service runbook        InventoryAPI   
+6              runbook_payment_processor  service runbook   payment-processor   
+9              runbook_paymentgateway_v2  service runbook   PaymentGateway_v2   
+10            runbook_recommendations_ai  service runbook  Recommendations-AI   
+11                  runbook_searchengine  service runbook        SearchEngine   
+12                 runbook_userprofiledb  service runbook       UserProfileDB   
+
+    sections  characters  
+0          6        4591  
+7          6        4609  
+8          6        4032  
+13         3        1433  
+14         3        1273  
+15         3        1292  
+1          6        3691  
+2          6        3626  
+3          6        3419  
+4          6        3395  
+5          6        3184  
+6          6        3401  
+9          6        3661  
+10         6        3308  
+11         6        3312  
+12         6        3677  </pre></article><article><h2>Code cell 21</h2><details><summary>Show code</summary><pre><code>doc = DOC_BY_ID[&quot;runbook_emailnotifier&quot;]
+for s in doc[&quot;sections&quot;]:
+    body = doc[&quot;text&quot;][s[&quot;start&quot;]:s[&quot;end&quot;]].split(&quot;\n&quot;, 1)[1].strip()
+    print(f&quot;■ {s[&#x27;section_id&#x27;]}  ({s[&#x27;end&#x27;] - s[&#x27;start&#x27;]} chars)\n   {body[:230]}...\n&quot;)</code></pre></details><h3>Saved output</h3><pre>■ s1_overview  (574 chars)
+   EmailNotifier, known as the email service, notifier, or mailer, sends transactional emails such as password resets, receipts, and notifications from a message queue. It depends on the external SMTP provider and the message queue. ...
+
+■ s2_symptoms  (558 chars)
+   Common symptoms are password-reset emails delayed, queue depth spikes, consumer lag measured in minutes, and SMTP 4xx/5xx responses from the external provider. Check the Mailer Queue Depth and Delivery Failure dashboards, then run...
+
+■ s3_fast_triage  (568 chars)
+   First establish whether the problem is queue-side or provider-side. Compare queue depth against the previous day and check consumer lag in minutes on the Mailer Lag panel. Run kubectl get pods -n mailer to identify missing, restar...
+
+■ s4_safe_mitigation  (533 chars)
+   If consumers are insufficient for load, scale them up by 1 or 2 temporarily with kubectl scale deployment/email-notifier -n mailer --replicas=4. Drain the backlog gradually and monitor retry rate, dead-letter arrivals, and SMTP 4x...
+
+■ s5_root_causes  (587 chars)
+   Recognise email_smtp_outage when the external SMTP provider returns 4xx/5xx responses, its status page shows degradation, and delivery success falls sharply; check provider response codes and latency. Recognise email_consumer_lag ...
+
+■ s6_escalation  (478 chars)
+   If email delays are longer than 15 minutes, page SRE_ONCALL. Attach the Mailer Queue Depth and Delivery Failure dashboard views, consumer lag trend, queue message IDs, SMTP response samples, provider status page link, and any miti...
+
+</pre></article><article><h2>Code cell 23</h2><details><summary>Show code</summary><pre><code>INCIDENTS = json.loads((DATA / &quot;incidents_test.json&quot;).read_text())
+print(len(INCIDENTS), &quot;test incidents\n&quot;)
+for inc in INCIDENTS[:3]:
+    print(&quot;LOG:  &quot;, inc[&quot;raw_log&quot;].replace(&quot;\n&quot;, &quot; / &quot;)[:220])
+    print(&quot;GOLD: &quot;, inc[&quot;gold&quot;][&quot;service_name&quot;], &quot;-&gt;&quot;, inc[&quot;gold&quot;][&quot;gold_sections&quot;])
+    print()</code></pre></details><h3>Saved output</h3><pre>25 test incidents
+
+LOG:   2026-02-11T09:14:03Z alert | sev=LOW | service=checkout API | dubel charges detected for 42 orders after deploy; deploy diff shows PROVIDER_CAPTURE_MODE changed from &#x27;single&#x27; to &#x27;retry&#x27; / payment-processor acks show dupl
+GOLD:  PaymentGateway_v2 -&gt; [&#x27;runbook_paymentgateway_v2#s2_symptoms&#x27;, &#x27;runbook_paymentgateway_v2#s4_safe_mitigation&#x27;, &#x27;runbook_paymentgateway_v2#s6_escalation&#x27;]
+
+LOG:   2026-02-11T09:41:10Z event | service=PaymentGateway_v2 | internal synthetic checkout probes saw 502s for 38s after config push / auto rollback restored provider env; first successful synthetic charge at 09:41:48 / no cus
+GOLD:  PaymentGateway_v2 -&gt; [&#x27;runbook_paymentgateway_v2#s2_symptoms&#x27;, &#x27;runbook_paymentgateway_v2#s4_safe_mitigation&#x27;]
+
+LOG:   ALERT 2104 | Level: URGENT | mailer | SMTP provider outaage since 08:50, delay now 26m / queue depth 18k, customer receipts delayed / provider status page confirms regional outage
+GOLD:  EmailNotifier -&gt; [&#x27;runbook_emailnotifier#s2_symptoms&#x27;, &#x27;runbook_emailnotifier#s4_safe_mitigation&#x27;, &#x27;runbook_emailnotifier#s6_escalation&#x27;]
+
+</pre></article><article><h2>Code cell 25</h2><details><summary>Show code</summary><pre><code>inc = INCIDENTS[0]
+print(&quot;LOG:\n&quot; + inc[&quot;raw_log&quot;] + &quot;\n&quot;)
+for g in inc[&quot;gold&quot;][&quot;gold_sections&quot;]:
+    doc_id, sec_id = g.split(&quot;#&quot;)
+    d = DOC_BY_ID[doc_id]; s = next(x for x in d[&quot;sections&quot;] if x[&quot;section_id&quot;] == sec_id)
+    print(f&quot;■ {g}\n{d[&#x27;text&#x27;][s[&#x27;start&#x27;]:s[&#x27;end&#x27;]][:400]}...\n&quot;)</code></pre></details><h3>Saved output</h3><pre>LOG:
+2026-02-11T09:14:03Z alert | sev=LOW | service=checkout API | dubel charges detected for 42 orders after deploy; deploy diff shows PROVIDER_CAPTURE_MODE changed from &#x27;single&#x27; to &#x27;retry&#x27;
+payment-processor acks show duplicate capture attempts; refunds pending
+ops note: possible customer overbilling, please triage
+no full outage, checkout responding
+
+■ runbook_paymentgateway_v2#s2_symptoms
+## s2_symptoms — Symptoms
+Typical symptoms include HTTP 5xx on /checkout and /payments, customer reports of failed checkout, increased pod restarts, and elevated p95 latency on payment endpoints. Check the Payments Error Rate and Latency dashboards first, then inspect kubectl get events -n payments and kubectl top pods -n payments. Look for 502/504 spikes, AuthServer 401/403 bursts, payment-proces...
+
+■ runbook_paymentgateway_v2#s4_safe_mitigation
+## s4_safe_mitigation — Safe mitigation
+If the error budget is burning, roll pods with kubectl rollout restart deployment/paymentgateway-v2 -n payments and watch the next two minutes. If capacity looks tight, scale replicas +1 temporarily with kubectl scale deployment/paymentgateway-v2 -n payments --replicas=3. If one upstream is unstable, enable the circuit breaker for that dependency rather than...
+
+■ runbook_paymentgateway_v2#s6_escalation
+## s6_escalation — Escalation
+If this is high severity or checkout has been down for more than 5 minutes, page SRE_ONCALL. Attach the Payments Overview screenshot, affected /checkout and /payments paths, request IDs, deploy timestamp, and current mitigation state. If there is suspected financial impact, such as double charges or lost payments, page SRE_ONCALL and FINOPS. Include customer-visible f...
+
+</pre></article><article><h2>Code cell 27</h2><details><summary>Show code</summary><pre><code>def gold_set(inc):
+    &quot;&quot;&quot;Gold sections of an incident as a set of (doc_id, section_id) pairs.&quot;&quot;&quot;
+    return {tuple(s.split(&quot;#&quot;)) for s in inc[&quot;gold&quot;][&quot;gold_sections&quot;]}
+
+def is_relevant(chunk, inc):
+    &quot;&quot;&quot;True if the chunk comes from a gold document AND covers one of its gold sections.&quot;&quot;&quot;
+    return any((chunk[&quot;doc_id&quot;], sec) in gold_set(inc) for sec in chunk[&quot;section_ids&quot;])
+
+inc = next(i for i in INCIDENTS if i[&quot;gold&quot;][&quot;service_name&quot;] == &quot;EmailNotifier&quot;)
+print(&quot;gold_sections (strings):&quot;, inc[&quot;gold&quot;][&quot;gold_sections&quot;])
+print(&quot;gold_set (pairs):       &quot;, gold_set(inc))
+print(&quot;three examples:&quot;, is_relevant({&quot;doc_id&quot;: &quot;runbook_emailnotifier&quot;, &quot;section_ids&quot;: [&quot;s4_safe_mitigation&quot;]}, inc),
+      is_relevant({&quot;doc_id&quot;: &quot;runbook_emailnotifier&quot;, &quot;section_ids&quot;: [&quot;s1_overview&quot;]}, inc),
+      is_relevant({&quot;doc_id&quot;: &quot;runbook_payment_reporting&quot;, &quot;section_ids&quot;: [&quot;s4_safe_mitigation&quot;]}, inc))</code></pre></details><h3>Saved output</h3><pre>gold_sections (strings): [&#x27;runbook_emailnotifier#s2_symptoms&#x27;, &#x27;runbook_emailnotifier#s4_safe_mitigation&#x27;, &#x27;runbook_emailnotifier#s6_escalation&#x27;]
+gold_set (pairs):        {(&#x27;runbook_emailnotifier&#x27;, &#x27;s6_escalation&#x27;), (&#x27;runbook_emailnotifier&#x27;, &#x27;s4_safe_mitigation&#x27;), (&#x27;runbook_emailnotifier&#x27;, &#x27;s2_symptoms&#x27;)}
+three examples: True False False
+</pre></article><article><h2>Code cell 30</h2><details><summary>Show code</summary><pre><code>def _check_window(size, overlap):
+    if not isinstance(size, int) or size &lt;= 0 or not isinstance(overlap, int) or not 0 &lt;= overlap &lt; size:
+        raise ValueError(&quot;size must be positive and overlap must be an integer in [0, size)&quot;)
+
+def chunk_fixed(doc, size=500, overlap=50):
+    _check_window(size, overlap)
+    chunks, text, start = [], doc[&quot;text&quot;], 0
+    if not text:
+        return chunks
+    while True:
+        end = min(start + size, len(text))
+        chunks.append({&quot;chunk_id&quot;: f&quot;{doc[&#x27;doc_id&#x27;]}#C1-{len(chunks):03d}&quot;, &quot;doc_id&quot;: doc[&quot;doc_id&quot;],
+                       &quot;service_name&quot;: doc[&quot;service_name&quot;], &quot;start&quot;: start, &quot;end&quot;: end,
+                       &quot;text&quot;: text[start:end], &quot;section_ids&quot;: sections_overlapping(doc, start, end)})
+        if end == len(text):
+            break
+        start = end - overlap
+    return chunks
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 31</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+_t = {&quot;doc_id&quot;: &quot;t&quot;, &quot;service_name&quot;: &quot;X&quot;, &quot;text&quot;: &quot;a&quot; * 1200,
+      &quot;sections&quot;: [{&quot;section_id&quot;: &quot;s1_a&quot;, &quot;start&quot;: 0, &quot;end&quot;: 600}, {&quot;section_id&quot;: &quot;s2_b&quot;, &quot;start&quot;: 600, &quot;end&quot;: 1200}]}
+_c = chunk_fixed(_t, size=500, overlap=50)
+assert len(_c) == 3, f&quot;expected 3 chunks for 1200 chars (size 500, overlap 50), got {len(_c)}&quot;
+assert [(x[&quot;start&quot;], x[&quot;end&quot;]) for x in _c] == [(0, 500), (450, 950), (900, 1200)], &quot;check your start/end positions&quot;
+assert _c[1][&quot;section_ids&quot;] == [&quot;s1_a&quot;, &quot;s2_b&quot;], &quot;the middle chunk overlaps both sections&quot;
+print(&quot;✅ chunk_fixed works.&quot;)</code></pre></details><h3>Saved output</h3><pre>✅ chunk_fixed works.
+</pre></article><article><h2>Code cell 33</h2><details><summary>Show code</summary><pre><code>def chunk_by_section(doc, max_len=800, overlap=80):
+    _check_window(max_len, overlap)
+    chunks, text = [], doc[&quot;text&quot;]
+    for sec in doc[&quot;sections&quot;]:
+        start = sec[&quot;start&quot;]
+        while start &lt; sec[&quot;end&quot;]:
+            end = min(start + max_len, sec[&quot;end&quot;])
+            chunks.append({&quot;chunk_id&quot;: f&quot;{doc[&#x27;doc_id&#x27;]}#C2-{len(chunks):03d}&quot;, &quot;doc_id&quot;: doc[&quot;doc_id&quot;],
+                           &quot;service_name&quot;: doc[&quot;service_name&quot;], &quot;start&quot;: start, &quot;end&quot;: end,
+                           &quot;text&quot;: text[start:end], &quot;section_ids&quot;: [sec[&quot;section_id&quot;]]})
+            if end == sec[&quot;end&quot;]:
+                break
+            start = end - overlap
+    return chunks
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 34</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+_t = {&quot;doc_id&quot;: &quot;t&quot;, &quot;service_name&quot;: &quot;X&quot;, &quot;text&quot;: &quot;b&quot; * 1300,
+      &quot;sections&quot;: [{&quot;section_id&quot;: &quot;s1_a&quot;, &quot;start&quot;: 0, &quot;end&quot;: 300}, {&quot;section_id&quot;: &quot;s2_b&quot;, &quot;start&quot;: 300, &quot;end&quot;: 1300}]}
+_c = chunk_by_section(_t, max_len=800, overlap=80)
+assert _c and all(len(x[&quot;section_ids&quot;]) == 1 for x in _c), &quot;every C2 chunk must have exactly one section id&quot;
+assert _c[0][&quot;start&quot;] == 0 and _c[0][&quot;end&quot;] == 300, &quot;a short section is one chunk&quot;
+assert sum(1 for x in _c if x[&quot;section_ids&quot;] == [&quot;s2_b&quot;]) == 2, &quot;a 1000-char section with max_len 800 becomes 2 pieces&quot;
+assert all(x[&quot;end&quot;] - x[&quot;start&quot;] &lt;= 800 for x in _c), &quot;no chunk may be longer than max_len&quot;
+print(&quot;✅ chunk_by_section works.&quot;)</code></pre></details><h3>Saved output</h3><pre>✅ chunk_by_section works.
+</pre></article><article><h2>Code cell 36</h2><details><summary>Show code</summary><pre><code>import pandas as pd
+CHUNKS = {&quot;C1&quot;: [ch for d in DOCS for ch in chunk_fixed(d)], &quot;C2&quot;: [ch for d in DOCS for ch in chunk_by_section(d)]}
+stats = pd.DataFrame([{&quot;strategy&quot;: k, &quot;chunks&quot;: len(v), &quot;mean_len&quot;: round(sum(len(x[&quot;text&quot;]) for x in v) / len(v)),
+                       &quot;min_len&quot;: min(len(x[&quot;text&quot;]) for x in v), &quot;max_len&quot;: max(len(x[&quot;text&quot;]) for x in v),
+                       &quot;chunks spanning &gt;1 section&quot;: sum(len(x[&quot;section_ids&quot;]) &gt; 1 for x in v)} for k, v in CHUNKS.items()])
+display(stats)</code></pre></details><h3>Saved output</h3><pre>  strategy  chunks  mean_len  min_len  max_len  chunks spanning &gt;1 section
+0       C1     123       465       61      500                          78
+1       C2      90       563       87      800                           0</pre></article><article><h2>Code cell 38</h2><details><summary>Show code</summary><pre><code>import hashlib, urllib.request
+import numpy as np, faiss
+from pathlib import Path
+EMBED_MODEL = &#x27;nomic-embed-text&#x27;
+pull(EMBED_MODEL)
+
+def api_post(route, payload, timeout=900):
+    url = os.environ.get(&quot;GENAI_OLLAMA_URL&quot;, &quot;http://localhost:11434&quot;)
+    req = urllib.request.Request(url + route, json.dumps(payload).encode(), {&quot;Content-Type&quot;: &quot;application/json&quot;})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+class Embedder:
+    &quot;&quot;&quot;Persistent document cache; query timings include actual uncached API embedding.&quot;&quot;&quot;
+    def __init__(self, cache_dir, model=EMBED_MODEL):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.model = model
+
+    def embed(self, texts, kind, cache=True):
+        if kind not in {&quot;document&quot;, &quot;query&quot;}:
+            raise ValueError(&quot;kind must be document or query&quot;)
+        prefix = &quot;search_document: &quot; if kind == &quot;document&quot; else &quot;search_query: &quot;
+        keys = [hashlib.sha256((self.model + &quot;\0&quot; + prefix + text).encode()).hexdigest() for text in texts]
+        vectors = [None] * len(texts)
+        missing = []
+        for i, key in enumerate(keys):
+            file = self.cache_dir / (key + &quot;.npy&quot;)
+            if cache and file.exists():
+                vectors[i] = np.load(file, allow_pickle=False)
+            else:
+                missing.append(i)
+        for start in range(0, len(missing), 32):
+            batch = missing[start:start + 32]
+            resp = api_post(&quot;/api/embed&quot;, {&quot;model&quot;: self.model, &quot;input&quot;: [prefix + texts[i] for i in batch],
+                                            &quot;options&quot;: {&quot;num_gpu&quot;: int(os.environ.get(&quot;GENAI_NUM_GPU&quot;, &quot;99&quot; if os.environ.get(&quot;GENAI_TRACK&quot;, &quot;CPU&quot;).upper() == &quot;GPU&quot; else &quot;0&quot;))}}, timeout=900)
+            if len(resp[&quot;embeddings&quot;]) != len(batch):
+                raise ValueError(&quot;Embedding API returned wrong vector count&quot;)
+            for i, vector in zip(batch, resp[&quot;embeddings&quot;]):
+                v = np.asarray(vector, dtype=&quot;float32&quot;)
+                norm = np.linalg.norm(v)
+                if not np.isfinite(norm) or norm &lt;= 0:
+                    raise ValueError(&quot;Invalid embedding vector&quot;)
+                vectors[i] = v / norm
+                if cache:
+                    np.save(self.cache_dir / (keys[i] + &quot;.npy&quot;), vectors[i], allow_pickle=False)
+        result = np.asarray(vectors, dtype=&quot;float32&quot;)
+        faiss.normalize_L2(result)
+        return result
+
+EMBEDDER = Embedder(RESULTS / &#x27;embedding_cache&#x27;)
+def embed(texts, kind):
+    return EMBEDDER.embed(texts, kind, cache=kind == &#x27;document&#x27;)
+def build_index(chunks):
+    vecs = embed([c[&#x27;text&#x27;] for c in chunks], &#x27;document&#x27;)
+    index = faiss.IndexFlatIP(vecs.shape[1]); index.add(vecs)
+    return {&#x27;index&#x27;: index, &#x27;chunks&#x27;: chunks}
+INDEXES = {name: build_index(chs) for name, chs in CHUNKS.items()}
+print({k: v[&#x27;index&#x27;].ntotal for k,v in INDEXES.items()}, &#x27;vectors indexed&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>{&#x27;C1&#x27;: 123, &#x27;C2&#x27;: 90} vectors indexed
+</pre></article><article><h2>Code cell 40</h2><details><summary>Show code</summary><pre><code>def retrieve_vector(q, idx, k=5, service_filter=None):
+    if k &lt;= 0:
+        return []
+    # Search all candidates, then retain the permitted metadata subset. This is
+    # exact filtered top-k; a fixed shortlist could discard permitted candidates.
+    scores, ids = idx[&quot;index&quot;].search(q, idx[&quot;index&quot;].ntotal)
+    results = []
+    filtering = bool(service_filter) and service_filter != &quot;UNKNOWN&quot;
+    for score, i in zip(scores[0], ids[0]):
+        if i &lt; 0:
+            continue
+        ch = idx[&quot;chunks&quot;][int(i)]
+        if filtering and ch[&quot;service_name&quot;] not in {service_filter, &quot;POLICY&quot;}:
+            continue
+        results.append({**ch, &quot;score&quot;: float(score)})
+        if len(results) == k:
+            break
+    return results
+
+def retrieve(query_text, idx, k=5, service_filter=None):
+    q = embed([query_text], &#x27;query&#x27;)
+    return retrieve_vector(q, idx, k, service_filter)
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 41</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+_r = retrieve(&quot;Login is slow and auth pods were OOMKilled&quot;, INDEXES[&quot;C2&quot;], k=5)
+assert len(_r) == 5 and all(&quot;score&quot; in x and &quot;section_ids&quot; in x for x in _r), &quot;return k dicts with the chunk fields and a score&quot;
+assert all(_r[i][&quot;score&quot;] &gt;= _r[i + 1][&quot;score&quot;] for i in range(4)), &quot;results must be sorted by score (highest first)&quot;
+_f = retrieve(&quot;Login is slow and auth pods were OOMKilled&quot;, INDEXES[&quot;C2&quot;], k=5, service_filter=&quot;EmailNotifier&quot;)
+assert all(x[&quot;service_name&quot;] in (&quot;EmailNotifier&quot;, &quot;POLICY&quot;) for x in _f), &quot;with a filter, only that service&#x27;s runbook + policies&quot;
+print(&quot;✅ retrieve works. Top hit:&quot;, _r[0][&quot;chunk_id&quot;], round(_r[0][&quot;score&quot;], 3))</code></pre></details><h3>Saved output</h3><pre>✅ retrieve works. Top hit: runbook_authserver#C2-002 0.704
+</pre></article><article><h2>Code cell 43</h2><details><summary>Show code</summary><pre><code>SERVICES = json.loads((DATA / &#x27;services.json&#x27;).read_text())[&#x27;services&#x27;]
+DEFAULT_MODEL = MODEL
+
+def extract_service(raw_log, services, model=DEFAULT_MODEL, log_path=None):
+    names = [s[&quot;service_name&quot;] for s in services]
+    schema = {&quot;type&quot;: &quot;object&quot;, &quot;properties&quot;: {&quot;service_name&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;enum&quot;: names + [&quot;UNKNOWN&quot;]}},
+              &quot;required&quot;: [&quot;service_name&quot;], &quot;additionalProperties&quot;: False}
+    aliases = &quot;\n&quot;.join(f&quot;- {s[&#x27;service_name&#x27;]} (also called: {&#x27;, &#x27;.join(s[&#x27;aliases&#x27;])})&quot; for s in services)
+    messages = [
+        {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;Name the affected Chaos Corp service. Map aliases to the canonical name. &quot;
+         &quot;If two services are mentioned, choose the one where the fault is.\n&quot; + aliases},
+        {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: raw_log},
+    ]
+    body = {&quot;model&quot;: model, &quot;messages&quot;: messages, &quot;stream&quot;: False, &quot;format&quot;: schema,
+            &quot;options&quot;: {&quot;temperature&quot;: 0, &quot;seed&quot;: 42,
+                        &quot;num_ctx&quot;: 4096 if os.environ.get(&quot;GENAI_TRACK&quot;, &quot;CPU&quot;).upper() == &quot;GPU&quot; else 2048,
+                        &quot;num_predict&quot;: 256 if os.environ.get(&quot;GENAI_TRACK&quot;, &quot;CPU&quot;).upper() == &quot;GPU&quot; else 200,
+                        &quot;num_gpu&quot;: int(os.environ.get(&quot;GENAI_NUM_GPU&quot;, &quot;99&quot; if os.environ.get(&quot;GENAI_TRACK&quot;, &quot;CPU&quot;).upper() == &quot;GPU&quot; else &quot;0&quot;))}}
+    if model.startswith(&quot;qwen3&quot;):
+        body[&quot;think&quot;] = False
+    t0 = time.perf_counter()
+    resp = api_post(&quot;/api/chat&quot;, body)
+    latency = time.perf_counter() - t0
+    raw = resp[&quot;message&quot;][&quot;content&quot;]
+    try:
+        service = json.loads(raw)[&quot;service_name&quot;]
+        if service not in names + [&quot;UNKNOWN&quot;]:
+            raise ValueError(&quot;unknown canonical service&quot;)
+        error = None
+    except (ValueError, KeyError, TypeError) as e:
+        service, error = &quot;UNKNOWN&quot;, str(e)
+    if log_path:
+        append_jsonl(log_path, {&quot;query_sha256&quot;: hashlib.sha256(raw_log.encode()).hexdigest(), &quot;model&quot;: model,
+                                &quot;raw_log&quot;: raw_log, &quot;messages&quot;: messages, &quot;raw_output&quot;: raw,
+                                &quot;service_name&quot;: service, &quot;latency_s&quot;: latency, &quot;error&quot;: error,
+                                &quot;eval_count&quot;: resp.get(&quot;eval_count&quot;), &quot;eval_duration&quot;: resp.get(&quot;eval_duration&quot;)})
+    return service
+
+def service_for_log(raw_log):
+    return extract_service(raw_log, SERVICES, MODEL, RESULTS / &#x27;service_calls.jsonl&#x27;)
+prediction_path = RESULTS / &#x27;service_predictions.jsonl&#x27;
+_saved_predictions = {r[&#x27;incident_key&#x27;]:r for r in read_jsonl(prediction_path)}
+GUESSED = {}
+for inc in INCIDENTS:
+    key = inc[&#x27;incident_key&#x27;]
+    if key not in _saved_predictions:
+        t0 = time.perf_counter(); service = service_for_log(inc[&#x27;raw_log&#x27;])
+        record = {&#x27;incident_key&#x27;:key, &#x27;service_name&#x27;:service, &#x27;latency_s&#x27;:time.perf_counter()-t0}
+        append_jsonl(prediction_path, record); _saved_predictions[key] = record
+    GUESSED[key] = _saved_predictions[key][&#x27;service_name&#x27;]
+correct = sum(GUESSED[i[&#x27;incident_key&#x27;]] == i[&#x27;gold&#x27;][&#x27;service_name&#x27;] for i in INCIDENTS)
+print(f&#x27;Service guessed correctly for {correct}/{len(INCIDENTS)} incidents&#x27;)
+print(&#x27;Persisted predictions are reused when resuming this exact model/data configuration.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>Service guessed correctly for 24/25 incidents
+Persisted predictions are reused when resuming this exact model/data configuration.
+</pre></article><article><h2>Code cell 45</h2><details><summary>Show code</summary><pre><code>def hit_at_k(rel, k):
+    return int(any(rel[:k]))
+
+def mrr(rel, k=5):
+    return next((1.0 / (i + 1) for i, relevant in enumerate(rel[:k]) if relevant), 0.0)
+
+def section_recall(chunks, inc, k=5):
+    gold = gold_set(inc)
+    covered = {(chunk[&quot;doc_id&quot;], sec) for chunk in chunks[:k] for sec in chunk[&quot;section_ids&quot;]}
+    return len(gold &amp; covered) / len(gold) if gold else 1.0
+
+def distractor_at_3(chunks):
+    return int(any(c[&quot;doc_id&quot;] in DISTRACTORS for c in chunks[:3]))
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 46</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+assert hit_at_k([False, True, False], 1) == 0 and hit_at_k([False, True, False], 3) == 1
+assert abs(mrr([False, False, True, False, False]) - 1 / 3) &lt; 1e-9 and mrr([False] * 5) == 0
+_inc = {&quot;gold&quot;: {&quot;gold_sections&quot;: [&quot;d#s2_symptoms&quot;, &quot;d#s4_safe_mitigation&quot;]}}
+_ch = [{&quot;doc_id&quot;: &quot;d&quot;, &quot;section_ids&quot;: [&quot;s2_symptoms&quot;]}, {&quot;doc_id&quot;: &quot;x&quot;, &quot;section_ids&quot;: [&quot;s4_safe_mitigation&quot;]}]
+assert section_recall(_ch, _inc) == 0.5, &quot;only sections of the gold runbook count&quot;
+assert distractor_at_3([{&quot;doc_id&quot;: &quot;a&quot;}, {&quot;doc_id&quot;: &quot;runbook_payment_reporting&quot;}]) == 1
+print(&quot;✅ All four metrics work.&quot;)</code></pre></details><h3>Saved output</h3><pre>✅ All four metrics work.
+</pre></article><article><h2>Code cell 48</h2><details><summary>Show code</summary><pre><code>MY_SIZE = 350
+MY_OVERLAP = 60
+MY_EXPECTATION = &#x27;I expect 350-character chunks with 60-character overlap to improve first-hit precision over 500/50 by mixing fewer sections, while possibly reducing section recall because each retrieved chunk covers less text.&#x27;
+print(&#x27;Advance expectation:&#x27;, MY_EXPECTATION)
+prereg = RESULTS / &#x27;preregistered_experiment.json&#x27;
+if not prereg.exists():
+    prereg.write_text(json.dumps({&#x27;size&#x27;:MY_SIZE, &#x27;overlap&#x27;:MY_OVERLAP, &#x27;expectation&#x27;:MY_EXPECTATION, &#x27;recorded_before_run&#x27;:time.strftime(&#x27;%Y-%m-%dT%H:%M:%SZ&#x27;,time.gmtime())}, indent=2))
+assert 0 &lt;= MY_OVERLAP &lt; MY_SIZE and (MY_SIZE, MY_OVERLAP) != (500,50)
+CHUNKS[&#x27;C1_own&#x27;] = [ch for d in DOCS for ch in chunk_fixed(d, MY_SIZE, MY_OVERLAP)]
+INDEXES[&#x27;C1_own&#x27;] = build_index(CHUNKS[&#x27;C1_own&#x27;])
+print(&#x27;C1_own chunks:&#x27;, len(CHUNKS[&#x27;C1_own&#x27;]))
+</code></pre></details><h3>Saved output</h3><pre>Advance expectation: I expect 350-character chunks with 60-character overlap to improve first-hit precision over 500/50 by mixing fewer sections, while possibly reducing section recall because each retrieved chunk covers less text.
+C1_own chunks: 184
+</pre></article><article><h2>Code cell 50</h2><details><summary>Show code</summary><pre><code>_retrieval_path = RESULTS / &#x27;retrieval_results.jsonl&#x27;
+_saved_rows = {(r[&#x27;chunking&#x27;],r[&#x27;use_filter&#x27;],r[&#x27;incident_key&#x27;]):r for r in read_jsonl(_retrieval_path)}
+def evaluate_config(chunking, use_filter):
+    rows = []
+    for inc in INCIDENTS:
+        key = (chunking,use_filter,inc[&#x27;incident_key&#x27;])
+        if key in _saved_rows:
+            rows.append(_saved_rows[key]); continue
+        t0 = time.perf_counter()
+        svc = GUESSED[inc[&#x27;incident_key&#x27;]] if use_filter else None
+        chunks = retrieve(inc[&#x27;raw_log&#x27;], INDEXES[chunking], 5, svc)
+        latency_ms = 1000*(time.perf_counter()-t0)
+        rel = [is_relevant(ch,inc) for ch in chunks]
+        row = {&#x27;chunking&#x27;:chunking,&#x27;use_filter&#x27;:use_filter,&#x27;incident_key&#x27;:inc[&#x27;incident_key&#x27;],
+               &#x27;guessed_service&#x27;:GUESSED[inc[&#x27;incident_key&#x27;]], &#x27;hit@1&#x27;:hit_at_k(rel,1),&#x27;hit@3&#x27;:hit_at_k(rel,3),
+               &#x27;mrr@5&#x27;:mrr(rel),&#x27;section_recall@5&#x27;:section_recall(chunks,inc),&#x27;distractor@3&#x27;:distractor_at_3(chunks),
+               &#x27;latency_ms&#x27;:latency_ms,&#x27;retrieved&#x27;:chunks,
+               &#x27;service_extraction_ms&#x27;:1000*_saved_predictions[inc[&#x27;incident_key&#x27;]][&#x27;latency_s&#x27;] if use_filter else 0,
+               &#x27;retrieved_characters@5&#x27;:sum(len(ch[&#x27;text&#x27;]) for ch in chunks)}
+        append_jsonl(_retrieval_path,row); _saved_rows[key] = row; rows.append(row)
+    return pd.DataFrame(rows)
+CONFIGS = {(ch,f):evaluate_config(ch,f) for ch in (&#x27;C1&#x27;,&#x27;C2&#x27;,&#x27;C1_own&#x27;) for f in (False,True)}
+metric_names = [&#x27;hit@1&#x27;,&#x27;hit@3&#x27;,&#x27;mrr@5&#x27;,&#x27;section_recall@5&#x27;,&#x27;distractor@3&#x27;,&#x27;latency_ms&#x27;,&#x27;service_extraction_ms&#x27;,&#x27;retrieved_characters@5&#x27;]
+summary = pd.DataFrame([{&#x27;chunking&#x27;:ch,&#x27;filter&#x27;:f,**frame[metric_names].mean().to_dict()} for (ch,f),frame in CONFIGS.items()])
+display(summary.round(3))
+summary.to_csv(RESULTS/&#x27;p1_notebook_summary.csv&#x27;,index=False)
+print(&#x27;Latency: query embedding plus exact FAISS search. Extractor cost is shown separately.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>  chunking  filter  hit@1  hit@3  mrr@5  section_recall@5  distractor@3  \
+0       C1   False   0.56   0.88  0.733             0.760          0.20   
+1       C1    True   0.72   0.96  0.833             0.893          0.00   
+2       C2   False   0.36   0.72  0.538             0.487          0.12   
+3       C2    True   0.36   0.80  0.587             0.687          0.00   
+4   C1_own   False   0.36   0.92  0.620             0.627          0.08   
+5   C1_own    True   0.60   0.96  0.773             0.847          0.00   
+
+   latency_ms  service_extraction_ms  retrieved_characters@5  
+0      67.153                  0.000                 2478.76  
+1      34.994                958.736                 2489.12  
+2      36.076                  0.000                 2845.20  
+3      35.783                958.736                 2790.04  
+4      37.687                  0.000                 1735.12  
+5      35.407                958.736                 1738.64  
+Latency: query embedding plus exact FAISS search. Extractor cost is shown separately.
+</pre></article><article><h2>Code cell 52</h2><details><summary>Show code</summary><pre><code>best_chunking = summary.sort_values(&quot;mrr@5&quot;, ascending=False, kind=&quot;stable&quot;).iloc[0][&quot;chunking&quot;]
+a, b = CONFIGS[(best_chunking, False)], CONFIGS[(best_chunking, True)]
+hurt = a[(a[&quot;hit@3&quot;] == 1) &amp; (b[&quot;hit@3&quot;] == 0)][&quot;incident_key&quot;]
+gold_by_key = {i[&quot;incident_key&quot;]: i[&quot;gold&quot;] for i in INCIDENTS}
+display(pd.DataFrame([{&quot;incident_key&quot;: k, &quot;guessed service&quot;: GUESSED[k], &quot;gold service&quot;: gold_by_key[k][&quot;service_name&quot;],
+                       &quot;tags&quot;: &quot;, &quot;.join(gold_by_key[k][&quot;hard_case_tags&quot;])} for k in hurt]) if len(hurt) else &quot;The filter never hurt hit@3.&quot;)
+</code></pre></details><h3>Saved output</h3><pre>  incident_key    guessed service       gold service  \
+0     NEW-2-09  PaymentGateway_v2  payment-processor   
+
+                                     tags  
+0  H1_missing_field, H4_ambiguous_service  </pre></article><article><h2>Code cell 56</h2><details><summary>Show code</summary><pre><code>best = summary.sort_values(&#x27;mrr@5&#x27;, ascending=False, kind=&#x27;stable&#x27;).iloc[0]
+BEST = (best[&#x27;chunking&#x27;], bool(best[&#x27;filter&#x27;]))
+ranked = CONFIGS[BEST].sort_values([&#x27;hit@3&#x27;,&#x27;mrr@5&#x27;,&#x27;section_recall@5&#x27;], kind=&#x27;stable&#x27;).copy()
+def _why(r):
+    if r[&#x27;hit@3&#x27;] == 0: return &#x27;no relevant passage in top 3&#x27;
+    if r[&#x27;hit@1&#x27;] == 0: return &#x27;relevant passage not first&#x27;
+    if r[&#x27;section_recall@5&#x27;] &lt; 1: return &#x27;some gold sections missing from top 5&#x27;
+    return &#x27;perfect&#x27;
+ranked[&#x27;why weak&#x27;] = ranked.apply(_why,axis=1)
+WEAKEST = ranked.head(5)
+print(&#x27;Best configuration:&#x27;, BEST)
+display(WEAKEST[[&#x27;incident_key&#x27;,&#x27;hit@1&#x27;,&#x27;hit@3&#x27;,&#x27;mrr@5&#x27;,&#x27;section_recall@5&#x27;,&#x27;why weak&#x27;]])
+fails = WEAKEST[&#x27;incident_key&#x27;].tolist()
+def show_failure(incident_key):
+    inc = next(i for i in INCIDENTS if i[&#x27;incident_key&#x27;]==incident_key)
+    row = CONFIGS[BEST].set_index(&#x27;incident_key&#x27;).loc[incident_key]
+    print(&#x27;LOG:&#x27;,inc[&#x27;raw_log&#x27;])
+    print(&#x27;GOLD:&#x27;,inc[&#x27;gold&#x27;][&#x27;gold_sections&#x27;],&#x27;| tags:&#x27;,inc[&#x27;gold&#x27;][&#x27;hard_case_tags&#x27;],&#x27;| guessed:&#x27;,GUESSED[incident_key])
+    for x in row[&#x27;retrieved&#x27;][:3]: print(f&quot;{x[&#x27;score&#x27;]:.4f} {x[&#x27;doc_id&#x27;]} {x[&#x27;section_ids&#x27;]} | {x[&#x27;text&#x27;]}&quot;)
+</code></pre></details><h3>Saved output</h3><pre>Best configuration: (&#x27;C1&#x27;, True)
+
+   incident_key  hit@1  hit@3     mrr@5  section_recall@5  \
+18     NEW-2-09      0      0  0.000000          0.000000   
+7      NEW-1-11      0      1  0.333333          1.000000   
+22     NEW-2-13      0      1  0.500000          0.666667   
+1      NEW-1-03      0      1  0.500000          1.000000   
+5      NEW-1-09      0      1  0.500000          1.000000   
+
+                        why weak  
+18  no relevant passage in top 3  
+7     relevant passage not first  
+22    relevant passage not first  
+1     relevant passage not first  
+5     relevant passage not first  </pre></article><article><h2>Code cell 58</h2><details><summary>Show code</summary><pre><code>for key in fails:
+    print(&#x27;\n&#x27; + &#x27;=&#x27;*80)
+    show_failure(key)
+
+# Separate exploratory fix. The six required configurations above are unchanged.
+EXPANSION = &#x27;Find symptoms, safe mitigation and escalation for this incident:\n&#x27;
+fix_plan = RESULTS/&#x27;query_expansion_plan.json&#x27;
+if not fix_plan.exists():
+    fix_plan.write_text(json.dumps({&#x27;prefix&#x27;:EXPANSION,
+        &#x27;expectation&#x27;:&#x27;I expect higher escalation coverage, with possible loss of first-hit ranking. A wrong service filter remains a problem.&#x27;,
+        &#x27;recorded_before_run&#x27;:time.strftime(&#x27;%Y-%m-%dT%H:%M:%SZ&#x27;,time.gmtime())},indent=2))
+assert json.loads(fix_plan.read_text())[&#x27;prefix&#x27;]==EXPANSION
+fix_path = RESULTS/&#x27;query_expansion_results.jsonl&#x27;
+fix_rows = {r[&#x27;incident_key&#x27;]:r for r in read_jsonl(fix_path)}
+for inc in INCIDENTS:
+    key=inc[&#x27;incident_key&#x27;]
+    if key in fix_rows: continue
+    t0=time.perf_counter()
+    chunks=retrieve(EXPANSION+inc[&#x27;raw_log&#x27;],INDEXES[BEST[0]],5,GUESSED[key] if BEST[1] else None)
+    elapsed=1000*(time.perf_counter()-t0)
+    rel=[is_relevant(c,inc) for c in chunks]
+    row={&#x27;incident_key&#x27;:key,&#x27;hit@1&#x27;:hit_at_k(rel,1),&#x27;hit@3&#x27;:hit_at_k(rel,3),&#x27;mrr@5&#x27;:mrr(rel),
+         &#x27;section_recall@5&#x27;:section_recall(chunks,inc),&#x27;distractor@3&#x27;:distractor_at_3(chunks),
+         &#x27;latency_ms&#x27;:elapsed,&#x27;guessed_service&#x27;:GUESSED[key],&#x27;retrieved&#x27;:chunks}
+    append_jsonl(fix_path,row);fix_rows[key]=row
+print(&#x27;Exploratory query expansion, same inspected incidents:&#x27;)
+display(pd.DataFrame(fix_rows.values())[[&#x27;hit@1&#x27;,&#x27;hit@3&#x27;,&#x27;mrr@5&#x27;,&#x27;section_recall@5&#x27;,&#x27;distractor@3&#x27;,&#x27;latency_ms&#x27;]].mean().to_frame(&#x27;mean&#x27;))
+print(&#x27;Recorded query times may include model loading and endpoint scheduling. Service extraction is reported separately.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>
+================================================================================
+LOG: payments worker note
+low priority
+3 sandbox transactions missing idempotency keys; no production customer impact.
+Closed by QA after replay test.
+GOLD: [&#x27;runbook_payment_processor#s2_symptoms&#x27;, &#x27;runbook_payment_processor#s4_safe_mitigation&#x27;] | tags: [&#x27;H1_missing_field&#x27;, &#x27;H4_ambiguous_service&#x27;] | guessed: PaymentGateway_v2
+0.6744 runbook_paymentgateway_v2 [&#x27;s6_escalation&#x27;] | # s6_escalation — Escalation
+If this is high severity or checkout has been down for more than 5 minutes, page SRE_ONCALL. Attach the Payments Overview screenshot, affected /checkout and /payments paths, request IDs, deploy timestamp, and current mitigation state. If there is suspected financial impact, such as double charges or lost payments, page SRE_ONCALL and FINOPS. Include customer-visible failure estimates, transaction identifiers where available, and evidence that retries did not resolve 
+0.6729 runbook_paymentgateway_v2 [&#x27;s1_overview&#x27;, &#x27;s2_symptoms&#x27;] | for /checkout and /payments, p95 latency, pod restarts, and retry counters. Use kubectl get pods -n payments to confirm rollout state and kubectl logs deployment/paymentgateway-v2 for request IDs. Keep change notes near deploys because provider settings and downstream timeouts often drive incidents.
+
+## s2_symptoms — Symptoms
+Typical symptoms include HTTP 5xx on /checkout and /payments, customer reports of failed checkout, increased pod restarts, and elevated p95 latency on payment endpoints. Ch
+0.6697 policy_severity [&#x27;s3_no_label&#x27;] | ## s3_no_label — No label given
+If the log has no severity label and no override applies:
+- **Medium** if users are affected (errors, degraded performance, delays),
+- **Low** if the issue recovered by itself within a minute, is cosmetic, or affects only unsupported legacy browsers,
+- **Low** if no users are affected (internal-only, sandbox, or caught by monitoring before any user impact).
+
+
+================================================================================
+LOG: INC-2111 | Severity: Medium | service: DB cluster | long-running analytics queries holding locks 9m
+reporting dashboard errors for 120 users, inserts delayed 30s
+no corruption detected
+GOLD: [&#x27;runbook_database_cluster#s2_symptoms&#x27;, &#x27;runbook_database_cluster#s4_safe_mitigation&#x27;] | tags: [&#x27;H4_ambiguous_service&#x27;] | guessed: DatabaseCluster
+0.6984 runbook_database_cluster [&#x27;s3_fast_triage&#x27;] | egin with the &quot;db-cluster-health&quot; dashboard to identify the affected node and time window. Use psql on the replica to inspect pg_stat_activity, pg_locks, and pg_stat_replication for lag, blocking chains, and idle transactions. Capture top slow queries with EXPLAIN plans where safe, and compare disk IO wait across nodes. Check storage volume utilization and recent maintenance activity. If a replica is degraded, determine whether read traffic can be shifted to healthier replicas. Preserve query sa
+0.6910 runbook_database_cluster [&#x27;s5_root_causes&#x27;, &#x27;s6_escalation&#x27;] | s long-running statements holding locks, blocked sessions, and elevated wait events; recognise it through pg_stat_activity durations and lock chains. db_disk_io appears as high IO wait on one replica, slow reads, and storage saturation; recognise it through node-specific IO metrics and slow replica response. Compare symptoms across primary and replicas to isolate the failing component.
+
+## s6_escalation — Escalation
+Escalate to DB_ONCALL for any data inconsistency or corruption sign, such as che
+0.6856 runbook_database_cluster [&#x27;s4_safe_mitigation&#x27;, &#x27;s5_root_causes&#x27;] | s degraded, fail over read traffic to healthy replicas while preserving primary write path. Monitor lock contention and replication lag after each step. Keep changes reversible and record exact commands, owners, and observed recovery.
+
+## s5_root_causes — Root Causes
+db_missing_index appears as full scans, high CPU, and slow queries on large tables; recognise it through plan output showing Seq Scan and low row estimates. db_long_queries appears as long-running statements holding locks, blocked s
+
+================================================================================
+LOG: INC-3451 recs
+Sev: SEV1
+GPU inference nodes saturated; recommendation latency doubled for 45 minutes.
+Fallback ranker served 18% of traffic.
+GOLD: [&#x27;runbook_recommendations_ai#s2_symptoms&#x27;, &#x27;runbook_recommendations_ai#s4_safe_mitigation&#x27;, &#x27;runbook_recommendations_ai#s6_escalation&#x27;] | tags: [&#x27;H3_format_noise&#x27;, &#x27;H4_ambiguous_service&#x27;] | guessed: Recommendations-AI
+0.7243 runbook_recommendations_ai [&#x27;s5_root_causes&#x27;] | s
+Identify rec_model_regression when latency or relevance metrics worsen immediately after a model deploy, while infrastructure remains healthy. rec_gpu_saturation appears as high GPU utilization, memory pressure, or queuing on inference nodes, often with rising p95 latency across replicas. rec_feature_store_latency is visible when feature-store p95 or timeout rate rises before recommender degradation. Use deploy timelines, per-version latency charts, node metrics, and feature-store traces to se
+0.7076 runbook_recommendations_ai [&#x27;s4_safe_mitigation&#x27;, &#x27;s5_root_causes&#x27;] | ce nodes. If a newly deployed model version is confirmed as the regression, roll back to the last known-good model version and verify fallback rate improves. Where supported, enable caching for frequent recommendation requests to reduce feature-store load and repeat inference work. After each step, watch p95 latency, fallback percentage, and GPU saturation for at least thirty minutes before declaring stabilization.
+
+## s5_root_causes — Root causes
+Identify rec_model_regression when latency or re
+0.6857 runbook_recommendations_ai [&#x27;s1_overview&#x27;] | # Recommendations-AI incident runbook
+doc_id: runbook_recommendations_ai
+service_name: Recommendations-AI
+
+## s1_overview — Overview
+Recommendations-AI serves personalized product recommendations to storefronts and mobile apps. It consumes features from the feature store and executes model inference on GPU inference nodes. Teams may refer to it as recommender, recs, or recommendation model. Its primary risk is silent degradation: users receive fewer relevant products while synthetic checks still
+
+================================================================================
+LOG: 2026-02-11T09:41:10Z event | service=PaymentGateway_v2 | internal synthetic checkout probes saw 502s for 38s after config push
+auto rollback restored provider env; first successful synthetic charge at 09:41:48
+no customer traffic affected; no duplicate or lost payments
+GOLD: [&#x27;runbook_paymentgateway_v2#s2_symptoms&#x27;, &#x27;runbook_paymentgateway_v2#s4_safe_mitigation&#x27;] | tags: [&#x27;H1_missing_field&#x27;] | guessed: PaymentGateway_v2
+0.7185 runbook_paymentgateway_v2 [&#x27;s5_root_causes&#x27;, &#x27;s6_escalation&#x27;] | ovider-specific errors appear immediately; inspect env values in the pod spec and deploy diff. Recognise pg_downstream_timeout when payment-processor p95 rises, HTTP 504s increase, and timeout counters climb; check the Upstream Health panel and network dashboards. Recognise pg_auth_slowdown when AuthServer token validation latency spikes, 401/403 rates rise, and checkout latency follows; compare AuthServer CPU, GC, and connection pool metrics.
+
+## s6_escalation — Escalation
+If this is high sever
+0.7014 runbook_paymentgateway_v2 [&#x27;s4_safe_mitigation&#x27;, &#x27;s5_root_causes&#x27;] | ne upstream is unstable, enable the circuit breaker for that dependency rather than retrying aggressively. If errors began immediately after a deploy, roll back the last deploy. Always capture request IDs and preserve logs for 60 minutes. Keep provider credentials and security controls unchanged during the incident.
+
+## s5_root_causes — Root causes
+Recognise pg_env_misconfig when a new deploy changes a payment-provider environment variable and provider-specific errors appear immediately; inspect
+0.6894 runbook_paymentgateway_v2 [&#x27;s6_escalation&#x27;] | # s6_escalation — Escalation
+If this is high severity or checkout has been down for more than 5 minutes, page SRE_ONCALL. Attach the Payments Overview screenshot, affected /checkout and /payments paths, request IDs, deploy timestamp, and current mitigation state. If there is suspected financial impact, such as double charges or lost payments, page SRE_ONCALL and FINOPS. Include customer-visible failure estimates, transaction identifiers where available, and evidence that retries did not resolve 
+
+================================================================================
+LOG: note 2109 | service=login service | signing-key rotation partially applied to 1 of 3 zones for 52s
+rotation completed automatically; no failed logins and no user errors reported
+GOLD: [&#x27;runbook_authserver#s2_symptoms&#x27;, &#x27;runbook_authserver#s4_safe_mitigation&#x27;] | tags: [&#x27;H1_missing_field&#x27;, &#x27;H4_ambiguous_service&#x27;] | guessed: AuthServer
+0.7332 runbook_authserver [&#x27;s5_root_causes&#x27;, &#x27;s6_escalation&#x27;] | tion retry rates, queue backlog, and repeated client attempts after transient failures; correlate with upstream retry policies. auth_key_rotation manifests as signature mismatch errors, mixed old/new key usage, or failed rotation job completion; inspect rotation job logs and key version distribution. Distinguish causes by timing: leaks grow over hours, retries spike with client traffic, and key issues align with rotation windows.
+
+## s6_escalation — Escalation
+Escalate to SRE_ONCALL when OOMKill
+0.7160 runbook_authserver [&#x27;s4_safe_mitigation&#x27;, &#x27;s5_root_causes&#x27;] | looks incomplete, re-run the key rotation job in dry-run mode before retrying production execution. Verify that UserProfileDB connections recover and token validation errors decrease. Record each action with timestamp, owner, and rollback note.
+
+## s5_root_causes — Root Causes
+auth_memory_leak appears as gradual RSS increase and OOMKilled without traffic change; check heap profiles and long-lived token caches. auth_token_retries shows high validation retry rates, queue backlog, and repeated clie
+0.6879 runbook_authserver [&#x27;s1_overview&#x27;, &#x27;s2_symptoms&#x27;] | d pod memory. Key alerts cover repeated OOMKilled events, rising p95 above baseline, failed token validation spikes, and anomalous geographic login patterns. Treat any outage as company-wide because downstream services depend on token checks.
+
+## s2_symptoms — Symptoms
+Common signs include slow logins, p95 latency above 800 ms, elevated 5xx responses, and token validation errors from dependent services. Pod-level symptoms include OOMKilled restarts, steady RSS growth, and repeated restarts in ku
+Exploratory query expansion, same inspected incidents:
+
+                        mean
+hit@1               0.600000
+hit@3               0.960000
+mrr@5               0.766667
+section_recall@5    0.913333
+distractor@3        0.000000
+latency_ms        331.027143
+Recorded query times may include model loading and endpoint scheduling. Service extraction is reported separately.
+</pre></article><article><h2>Code cell 60</h2><details><summary>Show code</summary><pre><code>import sys, importlib.metadata, platform
+print(&#x27;Python:&#x27;,sys.version.split()[0], &#x27;| platform:&#x27;,platform.platform())
+for name in [&#x27;numpy&#x27;,&#x27;pandas&#x27;,&#x27;faiss-cpu&#x27;,&#x27;requests&#x27;,&#x27;pydantic&#x27;,&#x27;langchain&#x27;,&#x27;langchain-ollama&#x27;]:
+    print(name,importlib.metadata.version(name))
+print(&#x27;Models:&#x27;, MODEL, EMBED_MODEL, &#x27;| track:&#x27;,TRACK, &#x27;| num_gpu:&#x27;,os.environ.get(&#x27;GENAI_NUM_GPU&#x27;,&#x27;99&#x27; if TRACK==&#x27;GPU&#x27; else &#x27;0&#x27;), &#x27;| seed:42 | temperature:0&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>Python: 3.12.14 | platform: macOS-26.5.1-arm64-arm-64bit
+numpy 2.3.5
+pandas 2.2.3
+faiss-cpu 1.15.1
+requests 2.32.5
+pydantic 2.14.1
+langchain 1.0.2
+langchain-ollama 1.1.0
+Models: qwen3:1.7b-q4_K_M nomic-embed-text | track: CPU | num_gpu: 0 | seed:42 | temperature:0
+</pre></article></main></body></html>

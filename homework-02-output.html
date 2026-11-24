@@ -1,0 +1,660 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Structured output / Asliddin Tirkashev</title><link rel="stylesheet" href="profile-coursework.css"><body class="output-page"><main><a href="portfolio.html#homework">Back to homework</a><h1>Laboratory 02 / Structured output</h1><p>Three extraction strategies on fifteen incidents, repeated with a smaller model.</p><p>Saved coursework outputs from 4 November 2026. This page does not rerun the model experiments.</p><a href="homework-02.ipynb" download>Download notebook</a><article><h2>Code cell 4</h2><details><summary>Show code</summary><pre><code>import importlib.util, sys, subprocess
+try:
+    IN_COLAB = importlib.util.find_spec(&#x27;google.colab&#x27;) is not None
+except ModuleNotFoundError:
+    IN_COLAB = False
+if IN_COLAB:
+    subprocess.check_call([sys.executable, &#x27;-m&#x27;, &#x27;pip&#x27;, &#x27;-q&#x27;, &#x27;install&#x27;, *[&#x27;requests==2.32.5&#x27;, &#x27;pydantic==2.14.1&#x27;, &#x27;pandas==2.2.3&#x27;]])
+import requests, pydantic, pandas as pd
+print({&#x27;Python&#x27;: sys.version.split()[0], &#x27;requests&#x27;: requests.__version__, &#x27;pydantic&#x27;: pydantic.__version__, &#x27;pandas&#x27;: pd.__version__})
+</code></pre></details><h3>Saved output</h3><pre>{&#x27;Python&#x27;: &#x27;3.12.14&#x27;, &#x27;requests&#x27;: &#x27;2.32.5&#x27;, &#x27;pydantic&#x27;: &#x27;2.14.1&#x27;, &#x27;pandas&#x27;: &#x27;2.2.3&#x27;}
+</pre></article><article><h2>Code cell 6</h2><details><summary>Show code</summary><pre><code>&quot;&quot;&quot;Lab 2: reproducible, resumable Ollama structured extraction measurements.&quot;&quot;&quot;
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal, Optional
+
+import pandas as pd
+import requests
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+HERE = Path.cwd()
+DATA = Path(os.environ.get(&quot;GENAI_DATA&quot;, str(HERE.parent / &quot;data&quot; / &quot;chaoscorp&quot;)))
+RESULTS = Path(os.environ.get(&quot;GENAI_L2_RESULTS&quot;, str(HERE / &quot;results&quot;)))
+TRACK = os.environ.get(&quot;GENAI_TRACK&quot;, &quot;CPU&quot;).upper()
+MODEL = os.environ.get(&quot;GENAI_MODEL&quot;, &quot;qwen3:4b-q4_K_M&quot; if TRACK == &quot;GPU&quot; else &quot;qwen3:1.7b-q4_K_M&quot;)
+TINY_MODEL = &quot;qwen3:0.6b-q4_K_M&quot;
+OLLAMA_URL = os.environ.get(&quot;OLLAMA_URL&quot;, &quot;http://localhost:11434&quot;).rstrip(&quot;/&quot;)
+OPTIONS = {&quot;temperature&quot;: 0, &quot;seed&quot;: 42, &quot;num_ctx&quot;: 4096 if TRACK == &quot;GPU&quot; else 2048,
+           &quot;num_predict&quot;: 512 if TRACK == &quot;GPU&quot; else 200}
+if TRACK == &quot;CPU&quot;:
+    OPTIONS[&quot;num_gpu&quot;] = 0  # A local Mac must not silently use Metal for a declared CPU run.
+else:
+    OPTIONS[&quot;num_gpu&quot;] = 99
+IN_COLAB = globals().get(&quot;IN_COLAB&quot;, False) or bool(os.environ.get(&quot;COLAB_RELEASE_TAG&quot;) or os.environ.get(&quot;COLAB_GPU&quot;) or os.environ.get(&quot;GENAI_IN_COLAB&quot;))
+RUNTIME = os.environ.get(&quot;GENAI_RUNTIME&quot;, (&quot;Google Colab &quot; if IN_COLAB else &quot;local &quot;) + TRACK)
+STRATEGY_NAMES = (&quot;A_retry&quot;, &quot;B_json_mode&quot;, &quot;C_schema&quot;)
+
+
+USE_DRIVE = False
+PRACTICE = &quot;L2&quot;
+print(&quot;Track:&quot;, TRACK, &quot;| model:&quot;, MODEL, &quot;| options:&quot;, OPTIONS)
+</code></pre></details><h3>Saved output</h3><pre>Track: CPU | model: qwen3:1.7b-q4_K_M | options: {&#x27;temperature&#x27;: 0, &#x27;seed&#x27;: 42, &#x27;num_ctx&#x27;: 2048, &#x27;num_predict&#x27;: 200, &#x27;num_gpu&#x27;: 0}
+</pre></article><article><h2>Code cell 8</h2><details><summary>Show code</summary><pre><code>import shutil
+if shutil.which(&#x27;nvidia-smi&#x27;):
+    gpu = subprocess.run([&#x27;nvidia-smi&#x27;, &#x27;--query-gpu=name,memory.total&#x27;, &#x27;--format=csv,noheader&#x27;], capture_output=True, text=True)
+    print(gpu.stdout.strip() or gpu.stderr.strip())
+else:
+    assert TRACK==&#x27;CPU&#x27;, &#x27;GPU track requires a GPU runtime.&#x27;
+    print(&#x27;No NVIDIA GPU detected; local CPU track is selected.&#x27;)
+print(platform.platform())
+</code></pre></details><h3>Saved output</h3><pre>No NVIDIA GPU detected; local CPU track is selected.
+macOS-26.5.1-arm64-arm-64bit
+</pre></article><article><h2>Code cell 10</h2><details><summary>Show code</summary><pre><code>import zipfile
+if not DATA.exists():
+    candidates = [Path.cwd()/&#x27;data/chaoscorp&#x27;, Path.cwd().parent/&#x27;data/chaoscorp&#x27;, Path.cwd()/&#x27;chaoscorp&#x27;, Path(&#x27;/content/chaoscorp&#x27;)]
+    DATA = next((p for p in candidates if p.exists()), DATA)
+if not DATA.exists() and IN_COLAB:
+    from google.colab import files
+    uploaded = files.upload()
+    zip_path = next(iter(uploaded))
+    with zipfile.ZipFile(zip_path) as z:
+        assert &#x27;chaoscorp/README.md&#x27; in z.namelist(), &#x27;Upload chaoscorp_data_pack_v2.zip.&#x27;
+        z.extractall(&#x27;/content&#x27;)
+    DATA = Path(&#x27;/content/chaoscorp&#x27;)
+assert (DATA/&#x27;incidents_dev.json&#x27;).exists(), f&#x27;Data not found: {DATA}. Set GENAI_DATA to the extracted chaoscorp directory.&#x27;
+RESULTS.mkdir(parents=True, exist_ok=True)
+print(&#x27;Data:&#x27;, DATA)
+print(&#x27;Results:&#x27;, RESULTS)
+</code></pre></details><h3>Saved output</h3><pre>Data: ../data/chaoscorp
+Results: results
+</pre></article><article><h2>Code cell 12</h2><details><summary>Show code</summary><pre><code>if IN_COLAB:
+    import os
+    if not shutil.which(&#x27;ollama&#x27;):
+        subprocess.run([&#x27;apt-get&#x27;,&#x27;-qq&#x27;,&#x27;install&#x27;,&#x27;-y&#x27;,&#x27;zstd&#x27;,&#x27;pciutils&#x27;], check=True)
+        subprocess.run(&#x27;curl -fsSL https://ollama.com/install.sh | sh&#x27;, shell=True, check=True)
+    ollama = subprocess.Popen([&#x27;ollama&#x27;,&#x27;serve&#x27;], stdout=open(&#x27;/content/ollama.log&#x27;,&#x27;w&#x27;), stderr=subprocess.STDOUT)
+    for _ in range(60):
+        try:
+            response = requests.get(OLLAMA_URL+&#x27;/api/version&#x27;, timeout=2)
+            response.raise_for_status()
+            break
+        except requests.RequestException:
+            time.sleep(1)
+response = requests.get(OLLAMA_URL+&#x27;/api/version&#x27;, timeout=10)
+response.raise_for_status()
+print(&#x27;Ollama:&#x27;, response.json())
+</code></pre></details><h3>Saved output</h3><pre>Ollama: {&#x27;version&#x27;: &#x27;0.17.4&#x27;}
+</pre></article><article><h2>Code cell 14</h2><details><summary>Show code</summary><pre><code>def read_jsonl(path):
+    if not Path(path).exists():
+        return []
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+def append_jsonl(path, record):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open(&quot;a&quot;, encoding=&quot;utf-8&quot;) as stream:
+        stream.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + &quot;\n&quot;)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def pull(model):
+    response = requests.post(OLLAMA_URL + &quot;/api/pull&quot;, json={&quot;model&quot;: model, &quot;stream&quot;: False}, timeout=3600)
+    response.raise_for_status()
+    return response.json()
+
+
+def check_ollama():
+    response = requests.get(OLLAMA_URL + &quot;/api/version&quot;, timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+
+def chat(messages, model, fmt=None):
+    body = {&quot;model&quot;: model, &quot;messages&quot;: messages, &quot;stream&quot;: False, &quot;options&quot;: OPTIONS,
+            &quot;keep_alive&quot;: &quot;10m&quot;}
+    if model.startswith(&quot;qwen3&quot;):
+        body[&quot;think&quot;] = False
+    if fmt is not None:
+        body[&quot;format&quot;] = fmt
+    response = requests.post(OLLAMA_URL + &quot;/api/chat&quot;, json=body, timeout=900)
+    response.raise_for_status()
+    full = response.json()
+    return full[&quot;message&quot;][&quot;content&quot;], full
+print(&quot;Helpers ready.&quot;)
+</code></pre></details><h3>Saved output</h3><pre>Helpers ready.
+</pre></article><article><h2>Code cell 17</h2><details><summary>Show code</summary><pre><code>if &#x27;GENAI_MODEL&#x27; not in os.environ:
+    cards = [HERE.parent/&#x27;l1/results/model_card.json&#x27;, HERE.parent/&#x27;results/L1/model_card.json&#x27;]
+    card = next((p for p in cards if p.exists()), None)
+    if card:
+        MODEL = json.loads(card.read_text())[&#x27;model&#x27;]
+pull(MODEL)
+print(&#x27;Lab 2 main model:&#x27;, MODEL)
+</code></pre></details><h3>Saved output</h3><pre>Lab 2 main model: qwen3:1.7b-q4_K_M
+</pre></article><article><h2>Code cell 19</h2><details><summary>Show code</summary><pre><code>INCIDENTS = json.loads((DATA/&#x27;incidents_dev.json&#x27;).read_text())
+SEVERITY_GUIDE = (DATA/&#x27;policies/policy_severity.md&#x27;).read_text()
+SERVICES = json.loads((DATA/&#x27;services.json&#x27;).read_text())[&#x27;services&#x27;]
+assert len(INCIDENTS) == 15
+print(len(INCIDENTS), &#x27;development incidents&#x27;)
+print(INCIDENTS[3][&#x27;raw_log&#x27;])
+print(&#x27;Gold is loaded for evaluation, and is not sent to the model.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>15 development incidents
+Alert: Database Cluster
+ID: 2002
+Level: MEDIUM
+Latency spiked to 200ms on the Read Replica. 
+Re-indexing suggested during maintenance window.
+Gold is loaded for evaluation, and is not sent to the model.
+</pre></article><article><h2>Code cell 21</h2><details><summary>Show code</summary><pre><code>import collections
+print(&quot;Hard-case tags in the 15 incidents:&quot;, dict(collections.Counter(t for i in INCIDENTS for t in i[&quot;gold&quot;][&quot;hard_case_tags&quot;])))</code></pre></details><h3>Saved output</h3><pre>Hard-case tags in the 15 incidents: {&#x27;H4_ambiguous_service&#x27;: 2, &#x27;H3_format_noise&#x27;: 4, &#x27;H5_multi_service&#x27;: 1, &#x27;H1_missing_field&#x27;: 1, &#x27;H2_contradictory_severity&#x27;: 1}
+</pre></article><article><h2>Code cell 23</h2><details><summary>Show code</summary><pre><code>ServiceName = Literal[&quot;PaymentGateway_v2&quot;, &quot;EmailNotifier&quot;, &quot;AuthServer&quot;, &quot;DatabaseCluster&quot;, &quot;Frontend_React&quot;,
+                      &quot;UserProfileDB&quot;, &quot;SearchEngine&quot;, &quot;payment-processor&quot;, &quot;InventoryAPI&quot;, &quot;Recommendations-AI&quot;, &quot;UNKNOWN&quot;]
+
+
+class Extraction(BaseModel):
+    model_config = ConfigDict(extra=&quot;forbid&quot;, strict=True)
+    incident_id: Optional[int] = Field(description=&quot;ID in the log, or null if there is none&quot;)
+    severity: Literal[&quot;High&quot;, &quot;Medium&quot;, &quot;Low&quot;]
+    service_name: ServiceName
+    summary: str = Field(description=&quot;at most 12 words&quot;)
+
+
+def load_data():
+    incidents = json.loads((DATA / &quot;incidents_dev.json&quot;).read_text())
+    guide = (DATA / &quot;policies&quot; / &quot;policy_severity.md&quot;).read_text()
+    services = json.loads((DATA / &quot;services.json&quot;).read_text())[&quot;services&quot;]
+    service_lines = &quot;\n&quot;.join(f&quot;- {s[&#x27;service_name&#x27;]} (also called: {&#x27;, &#x27;.join(s[&#x27;aliases&#x27;])})&quot; for s in services)
+    system_prompt = f&quot;&quot;&quot;You extract incident records for Chaos Corp.
+Apply this severity guide exactly (including the upward overrides):
+{guide}
+
+Valid service names (map aliases to the canonical name; use UNKNOWN if no service matches):
+{service_lines}
+
+Return JSON with exactly these fields: incident_id (integer or null), severity (High|Medium|Low), service_name, summary (at most 12 words).
+Return only JSON without markdown or explanations.&quot;&quot;&quot;
+    assert len(incidents) == 15
+    return incidents, system_prompt
+
+
+def validate(text):
+    try:
+        return Extraction.model_validate_json(text), None
+    except ValidationError as error:
+        return None, str(error)
+
+
+def words_ok(record):
+    if isinstance(record, Extraction):
+        record = record.model_dump()
+    return record is not None and len(record[&quot;summary&quot;].split()) &lt;= 12
+INCIDENTS, SYSTEM_PROMPT = load_data()
+print(SYSTEM_PROMPT[:600])
+</code></pre></details><h3>Saved output</h3><pre>You extract incident records for Chaos Corp.
+Apply this severity guide exactly (including the upward overrides):
+# Chaos Corp — Severity Guide
+doc_id: policy_severity
+
+## s1_label_mapping — Explicit labels
+Map the label written in the log to exactly one of High | Medium | Low:
+- **High:** critical, critical failure, sev1, sev-1, p1, high, urgent
+- **Medium:** medium, sev2, sev-2, p2, moderate
+- **Low:** low, low priority, sev3, sev4, p3, p4, minor
+Labels are case-insensitive and may be abbreviated (e.g., `Sev: HIGH`, `Level: MEDIUM`, `| Low Priority`).
+
+## s2_overrides — Upward overrides
+Raise
+</pre></article><article><h2>Code cell 26</h2><details><summary>Show code</summary><pre><code>def repair_message(error):
+    return f&quot;Your JSON was invalid: {error}. Return only corrected JSON, with no explanations or markdown.&quot;</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 27</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+msg = repair_message(&quot;severity: Input should be &#x27;High&#x27;, &#x27;Medium&#x27; or &#x27;Low&#x27;&quot;)
+assert msg, &quot;repair_message returned an empty string.&quot;
+assert &quot;severity: Input should be&quot; in msg, &quot;The message must contain the error text: put {error} inside your f-string.&quot;
+assert &quot;json&quot; in msg.lower(), &quot;The message must mention JSON.&quot;
+print(&quot;✅ Repair message OK:&quot;, msg)</code></pre></details><h3>Saved output</h3><pre>✅ Repair message OK: Your JSON was invalid: severity: Input should be &#x27;High&#x27;, &#x27;Medium&#x27; or &#x27;Low&#x27;. Return only corrected JSON, with no explanations or markdown.
+</pre></article><article><h2>Code cell 29</h2><details><summary>Show code</summary><pre><code>def config_id(model, system_prompt):
+    payload = {&quot;model&quot;: model, &quot;options&quot;: OPTIONS, &quot;prompt&quot;: system_prompt,
+               &quot;schema&quot;: Extraction.model_json_schema(), &quot;version&quot;: 1}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def dataset_identity(incidents):
+    &quot;&quot;&quot;Cache only model inputs; gold labels remain evaluation-only.&quot;&quot;&quot;
+    inputs=[{&#x27;incident_key&#x27;:row[&#x27;incident_key&#x27;],&#x27;raw_log&#x27;:row[&#x27;raw_log&#x27;]} for row in incidents]
+    return hashlib.sha256(json.dumps(inputs,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+
+def ensure_dataset_identity(folder,incidents):
+    path=Path(folder)/&#x27;dataset_manifest.json&#x27;
+    expected={&#x27;version&#x27;:1,&#x27;inputs_sha256&#x27;:dataset_identity(incidents),
+              &#x27;incident_keys&#x27;:[row[&#x27;incident_key&#x27;] for row in incidents]}
+    if path.exists():
+        if json.loads(path.read_text())[&#x27;identity&#x27;]!=expected:
+            raise ValueError(&#x27;Cached dataset identity differs; use a new results folder.&#x27;)
+    else:
+        if any(read_jsonl(Path(folder)/f&#x27;{name}.jsonl&#x27;) for name in STRATEGY_NAMES):
+            raise ValueError(&#x27;Legacy cached dataset has no identity manifest; audit it or use a new results folder.&#x27;)
+        path.write_text(json.dumps({&#x27;identity&#x27;:expected,&#x27;established_utc&#x27;:datetime.now(timezone.utc).isoformat(),
+                                   &#x27;established_by&#x27;:&#x27;before model calls&#x27;},indent=2))
+
+
+def run_strategy(incident, model, strategy, system_prompt, call_log_path=None):
+    if strategy not in STRATEGY_NAMES:
+        raise ValueError(strategy)
+    fmt = None if strategy == &quot;A_retry&quot; else (&quot;json&quot; if strategy == &quot;B_json_mode&quot; else Extraction.model_json_schema())
+    max_retries = 1 if strategy == &quot;C_schema&quot; else 3
+    # Only raw_log enters the model. Gold is reserved for evaluation below.
+    messages = [{&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: system_prompt}, {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: incident[&quot;raw_log&quot;]}]
+    attempts, final = [], None
+    experiment_id = config_id(model, system_prompt)
+    for attempt in range(1 + max_retries):
+        started = time.perf_counter()
+        full, raw, error, rec = None, None, None, None
+        try:
+            raw, full = chat(messages, model=model, fmt=fmt)
+            rec, error = validate(raw)
+        except (requests.RequestException, KeyError, ValueError) as failure:
+            error = f&quot;{type(failure).__name__}: {failure}&quot;
+        latency = time.perf_counter() - started
+        entry = {&quot;experiment_id&quot;: experiment_id, &quot;model&quot;: model, &quot;strategy&quot;: strategy,
+                 &quot;incident_key&quot;: incident[&quot;incident_key&quot;], &quot;attempt&quot;: attempt + 1,
+                 &quot;timestamp_utc&quot;: datetime.now(timezone.utc).isoformat(), &quot;latency_s&quot;: latency,
+                 &quot;raw&quot;: raw, &quot;error&quot;: error, &quot;schema_valid&quot;: rec is not None,
+                 &quot;summary_words_ok&quot;: words_ok(rec), &quot;response&quot;: full}
+        attempts.append(entry)
+        if call_log_path is not None:
+            append_jsonl(call_log_path, entry)
+        if rec is not None:
+            final = rec.model_dump()
+            break
+        if raw is not None:
+            messages.append({&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: raw})
+        messages.append({&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: repair_message(error)})
+    return {&quot;experiment_id&quot;: experiment_id, &quot;model&quot;: model, &quot;strategy&quot;: strategy,
+            &quot;incident_key&quot;: incident[&quot;incident_key&quot;], &quot;attempts&quot;: attempts, &quot;calls&quot;: len(attempts),
+            &quot;latency_s&quot;: sum(a[&quot;latency_s&quot;] for a in attempts), &quot;final&quot;: final}
+
+
+def run_all(folder, model, incidents, system_prompt):
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    ensure_dataset_identity(folder,incidents)
+    experiment_id = config_id(model, system_prompt)
+    for strategy in STRATEGY_NAMES:
+        path = folder / f&quot;{strategy}.jsonl&quot;
+        existing = read_jsonl(path)
+        if any(row.get(&quot;experiment_id&quot;) != experiment_id for row in existing):
+            raise ValueError(f&quot;Cached configuration differs: {path}; use a new results folder.&quot;)
+        done = {row[&quot;incident_key&quot;] for row in existing}
+        for inc in incidents:
+            if inc[&quot;incident_key&quot;] not in done:
+                result = run_strategy(inc, model, strategy, system_prompt, folder / &quot;calls.jsonl&quot;)
+                append_jsonl(path, result)
+                print(f&quot;{model} {strategy} {inc[&#x27;incident_key&#x27;]}: calls={result[&#x27;calls&#x27;]}, valid={result[&#x27;final&#x27;] is not None}&quot;, flush=True)
+        print(strategy, &quot;completed&quot;, len(read_jsonl(path)), &quot;/&quot;, len(incidents), flush=True)
+def strategy_a(inc):
+    return run_strategy(inc, MODEL, &#x27;A_retry&#x27;, SYSTEM_PROMPT)
+print(&#x27;A: ordinary JSON prompt, Pydantic validation, at most three repairs.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>A: ordinary JSON prompt, Pydantic validation, at most three repairs.
+</pre></article><article><h2>Code cell 32</h2><details><summary>Show code</summary><pre><code>def strategy_b(inc):
+    return run_strategy(inc, MODEL, &#x27;B_json_mode&#x27;, SYSTEM_PROMPT)
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 33</h2><details><summary>Show code</summary><pre><code>assert callable(strategy_b)
+print(&#x27;B: format=&quot;json&quot;, the same Pydantic validation and repair loop.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>B: format=&quot;json&quot;, the same Pydantic validation and repair loop.
+</pre></article><article><h2>Code cell 35</h2><details><summary>Show code</summary><pre><code>def strategy_c(inc):
+    return run_strategy(inc, MODEL, &#x27;C_schema&#x27;, SYSTEM_PROMPT)
+print(&#x27;C: JSON-schema-constrained decoding, followed by validation.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>C: JSON-schema-constrained decoding, followed by validation.
+</pre></article><article><h2>Code cell 37</h2><details><summary>Show code</summary><pre><code>MAIN = RESULTS/&#x27;main&#x27;
+STRATEGIES = {&#x27;A_retry&#x27;: strategy_a, &#x27;B_json_mode&#x27;: strategy_b, &#x27;C_schema&#x27;: strategy_c}
+run_all(MAIN, MODEL, INCIDENTS, SYSTEM_PROMPT)
+</code></pre></details><h3>Saved output</h3><pre>A_retry completed 15 / 15
+
+B_json_mode completed 15 / 15
+
+C_schema completed 15 / 15
+</pre></article><article><h2>Code cell 39</h2><details><summary>Show code</summary><pre><code>FIELDS = (&quot;incident_id&quot;, &quot;severity&quot;, &quot;service_name&quot;)
+
+
+def evaluate(strategy, folder, incidents):
+    rows = read_jsonl(Path(folder) / f&quot;{strategy}.jsonl&quot;)
+    gold = {incident[&quot;incident_key&quot;]: incident[&quot;gold&quot;] for incident in incidents}
+    n = len(incidents)
+    if len(rows) != n or len({row[&quot;incident_key&quot;] for row in rows}) != n:
+        raise ValueError(f&quot;Expected {n} unique results for {strategy}; found {len(rows)}&quot;)
+    accuracy = {f: 100 * sum(row[&quot;final&quot;] is not None and row[&quot;final&quot;][f] == gold[row[&quot;incident_key&quot;]][f]
+                             for row in rows) / n for f in FIELDS}
+    return {&quot;strategy&quot;: strategy,
+            &quot;valid first try %&quot;: 100 * sum(row[&quot;attempts&quot;][0][&quot;schema_valid&quot;] for row in rows) / n,
+            &quot;valid after retries %&quot;: 100 * sum(row[&quot;final&quot;] is not None for row in rows) / n,
+            &quot;mean calls&quot;: sum(row[&quot;calls&quot;] for row in rows) / n,
+            &quot;mean latency s&quot;: sum(row[&quot;latency_s&quot;] for row in rows) / n,
+            **{f&quot;{f} acc %&quot;: value for f, value in accuracy.items()},
+            &quot;summary &lt;=12 words %&quot;: 100 * sum(words_ok(row[&quot;final&quot;]) for row in rows) / n}
+
+
+def field_explanation(field, incident, predicted, valid):
+    if not valid:
+        return &quot;No schema-valid final record; every target field counts as wrong.&quot;
+    tags = incident[&quot;gold&quot;][&quot;hard_case_tags&quot;]
+    if field == &quot;incident_id&quot;:
+        if predicted is None and incident[&#x27;gold&#x27;][&#x27;incident_id&#x27;] is not None:
+            return f&quot;The output omits the explicit incident identifier {incident[&#x27;gold&#x27;][&#x27;incident_id&#x27;]} present in the log.&quot;
+        return &quot;The record invents or misreads an incident identifier; missing IDs must remain null.&quot;
+    if field == &quot;severity&quot;:
+        if &quot;H2_contradictory_severity&quot; in tags:
+            return &quot;The written label conflicts with impact; the severity guide&#x27;s upward override takes priority.&quot;
+        return &quot;The severity does not follow the label mapping or no-label impact rules.&quot;
+    if &quot;H5_multi_service&quot; in tags:
+        return &quot;Several services are mentioned; the output selects a different service from the one at fault.&quot;
+    if &quot;H4_ambiguous_service&quot; in tags:
+        return &quot;The alias is not mapped to the correct canonical service.&quot;
+    return &quot;The selected canonical service does not match the service affected in the log.&quot;
+
+
+def error_table(folder, incidents):
+    errors = []
+    by_key = {incident[&quot;incident_key&quot;]: incident for incident in incidents}
+    for strategy in STRATEGY_NAMES:
+        for row in read_jsonl(Path(folder) / f&quot;{strategy}.jsonl&quot;):
+            inc = by_key[row[&quot;incident_key&quot;]]
+            final, g = row[&quot;final&quot;], inc[&quot;gold&quot;]
+            for field in FIELDS:
+                predicted = final[field] if final is not None else None
+                if final is None or predicted != g[field]:
+                    errors.append({&quot;strategy&quot;: strategy, &quot;incident_key&quot;: inc[&quot;incident_key&quot;],
+                                   &quot;field&quot;: field, &quot;predicted&quot;: predicted, &quot;gold&quot;: g[field],
+                                   &quot;valid_output&quot;: final is not None,
+                                   &quot;hard_case_tags&quot;: &quot;, &quot;.join(g[&quot;hard_case_tags&quot;]),
+                                   &quot;explanation&quot;: field_explanation(field, inc, predicted, final is not None)})
+    return pd.DataFrame(errors, columns=[&quot;strategy&quot;, &quot;incident_key&quot;, &quot;field&quot;, &quot;predicted&quot;, &quot;gold&quot;, &quot;valid_output&quot;, &quot;hard_case_tags&quot;, &quot;explanation&quot;])
+
+
+def metric_table(folder, incidents):
+    return pd.DataFrame([evaluate(name, folder, incidents) for name in STRATEGY_NAMES]).set_index(&quot;strategy&quot;).T
+
+
+def summary_limit_violations(folder):
+    rows = []
+    for strategy in STRATEGY_NAMES:
+        for row in read_jsonl(Path(folder) / f&#x27;{strategy}.jsonl&#x27;):
+            final = row[&#x27;final&#x27;]
+            if final is not None and not words_ok(final):
+                rows.append({&#x27;strategy&#x27;: strategy, &#x27;incident_key&#x27;: row[&#x27;incident_key&#x27;],
+                             &#x27;summary&#x27;: final[&#x27;summary&#x27;], &#x27;word_count&#x27;: len(final[&#x27;summary&#x27;].split())})
+    return pd.DataFrame(rows, columns=[&#x27;strategy&#x27;, &#x27;incident_key&#x27;, &#x27;summary&#x27;, &#x27;word_count&#x27;])
+
+
+def save_tables(folder, incidents):
+    folder = Path(folder)
+    metric_table(folder, incidents).to_csv(folder / &quot;metrics.csv&quot;)
+    error_table(folder, incidents).to_csv(folder / &quot;errors.csv&quot;, index=False)
+    summary_limit_violations(folder).to_csv(folder / &#x27;summary_limit_violations.csv&#x27;, index=False)
+    calls = read_jsonl(folder / &quot;calls.jsonl&quot;)
+    pd.DataFrame([{k: v for k, v in call.items() if k != &quot;response&quot;} for call in calls]).to_csv(folder / &quot;calls.csv&quot;, index=False)
+metrics = metric_table(MAIN, INCIDENTS)
+display(metrics.round(2))
+pd.set_option(&#x27;display.max_rows&#x27;, 200)
+pd.set_option(&#x27;display.max_colwidth&#x27;, 120)
+call_log = pd.DataFrame([{k:v for k,v in call.items() if k!=&#x27;response&#x27;} for call in read_jsonl(MAIN/&#x27;calls.jsonl&#x27;)])
+display(call_log[[&#x27;model&#x27;,&#x27;strategy&#x27;,&#x27;incident_key&#x27;,&#x27;attempt&#x27;,&#x27;latency_s&#x27;,&#x27;schema_valid&#x27;,&#x27;error&#x27;,&#x27;raw&#x27;]])
+save_tables(MAIN, INCIDENTS)
+print(&#x27;Full call logs:&#x27;, MAIN/&#x27;calls.jsonl&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>strategy               A_retry  B_json_mode  C_schema
+valid first try %       100.00       100.00    100.00
+valid after retries %   100.00       100.00    100.00
+mean calls                1.00         1.00      1.00
+mean latency s            1.03         1.05      1.12
+incident_id acc %        93.33        93.33     93.33
+severity acc %          100.00       100.00    100.00
+service_name acc %      100.00       100.00    100.00
+summary &lt;=12 words %    100.00       100.00    100.00
+                model     strategy incident_key  attempt  latency_s  \
+0   qwen3:1.7b-q4_K_M      A_retry    ORIG-1044        1   2.362199   
+1   qwen3:1.7b-q4_K_M      A_retry    ORIG-9901        1   0.640608   
+2   qwen3:1.7b-q4_K_M      A_retry    ORIG-4055        1   0.781649   
+3   qwen3:1.7b-q4_K_M      A_retry    ORIG-2002        1   0.856913   
+4   qwen3:1.7b-q4_K_M      A_retry    ORIG-5500        1   0.934429   
+5   qwen3:1.7b-q4_K_M      A_retry    ORIG-8812        1   0.937706   
+6   qwen3:1.7b-q4_K_M      A_retry    ORIG-3321        1   0.984964   
+7   qwen3:1.7b-q4_K_M      A_retry    ORIG-1111        1   0.817808   
+8   qwen3:1.7b-q4_K_M      A_retry    ORIG-7734        1   0.911410   
+9   qwen3:1.7b-q4_K_M      A_retry    ORIG-6005        1   0.934857   
+10  qwen3:1.7b-q4_K_M      A_retry     NEW-1-02        1   1.167106   
+11  qwen3:1.7b-q4_K_M      A_retry     NEW-1-06        1   1.114698   
+12  qwen3:1.7b-q4_K_M      A_retry     NEW-1-08        1   1.082616   
+13  qwen3:1.7b-q4_K_M      A_retry     NEW-1-12        1   0.841976   
+14  qwen3:1.7b-q4_K_M      A_retry     NEW-2-07        1   1.017220   
+15  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-1044        1   1.088146   
+16  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-9901        1   0.873163   
+17  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-4055        1   1.079076   
+18  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-2002        1   1.044662   
+19  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-5500        1   1.071790   
+20  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-8812        1   0.965265   
+21  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-3321        1   1.093770   
+22  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-1111        1   0.950607   
+23  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-7734        1   0.945594   
+24  qwen3:1.7b-q4_K_M  B_json_mode    ORIG-6005        1   0.962737   
+25  qwen3:1.7b-q4_K_M  B_json_mode     NEW-1-02        1   1.302449   
+26  qwen3:1.7b-q4_K_M  B_json_mode     NEW-1-06        1   1.201011   
+27  qwen3:1.7b-q4_K_M  B_json_mode     NEW-1-08        1   1.073145   
+28  qwen3:1.7b-q4_K_M  B_json_mode     NEW-1-12        1   1.052305   
+29  qwen3:1.7b-q4_K_M  B_json_mode     NEW-2-07        1   1.020837   
+30  qwen3:1.7b-q4_K_M     C_schema    ORIG-1044        1   1.335038   
+31  qwen3:1.7b-q4_K_M     C_schema    ORIG-9901        1   0.922264   
+32  qwen3:1.7b-q4_K_M     C_schema    ORIG-4055        1   1.176128   
+33  qwen3:1.7b-q4_K_M     C_schema    ORIG-2002        1   1.063975   
+34  qwen3:1.7b-q4_K_M     C_schema    ORIG-5500        1   1.134829   
+35  qwen3:1.7b-q4_K_M     C_schema    ORIG-8812        1   1.073470   
+36  qwen3:1.7b-q4_K_M     C_schema    ORIG-3321        1   1.099207   
+37  qwen3:1.7b-q4_K_M     C_schema    ORIG-1111        1   0.955328   
+38  qwen3:1.7b-q4_K_M     C_schema    ORIG-7734        1   1.001689   
+39  qwen3:1.7b-q4_K_M     C_schema    ORIG-6005        1   1.092491   
+40  qwen3:1.7b-q4_K_M     C_schema     NEW-1-02        1   1.450000   
+41  qwen3:1.7b-q4_K_M     C_schema     NEW-1-06        1   1.181439   
+42  qwen3:1.7b-q4_K_M     C_schema     NEW-1-08        1   1.117459   
+43  qwen3:1.7b-q4_K_M     C_schema     NEW-1-12        1   1.046862   
+44  qwen3:1.7b-q4_K_M     C_schema     NEW-2-07        1   1.097237   
+
+    schema_valid error  \
+0           True  None   
+1           True  None   
+2           True  None   
+3           True  None   
+4           True  None   
+5           True  None   
+6           True  None   
+7           True  None   
+8           True  None   
+9           True  None   
+10          True  None   
+11          True  None   
+12          True  None   
+13          True  None   
+14          True  None   
+15          True  None   
+16          True  None   
+17          True  None   
+18          True  None   
+19          True  None   
+20          True  None   
+21          True  None   
+22          True  None   
+23          True  None   
+24          True  None   
+25          True  None   
+26          True  None   
+27          True  None   
+28          True  None   
+29          True  None   
+30          True  None   
+31          True  None   
+32          True  None   
+33          True  None   
+34          True  None   
+35          True  None   
+36          True  None   
+37          True  None   
+38          True  None   
+39          True  None   
+40          True  None   
+41          True  None   
+42          True  None   
+43          True  None   
+44          True  None   
+
+                                                                                                                        raw  
+0   {\n  &quot;incident_id&quot;: 1044,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;API endpoint...  
+1   {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;Delayed reset pas...  
+2   {\n  &quot;incident_id&quot;: 4055,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;Memory leak in Auth...  
+3   {\n  &quot;incident_id&quot;: 2002,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Latency spik...  
+4   {\n  &quot;incident_id&quot;: 5500,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Frontend_React&quot;,\n  &quot;summary&quot;: &quot;CSS not loading ...  
+5   {\n  &quot;incident_id&quot;: 8812,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;UserProfileDB&quot;,\n  &quot;summary&quot;: &quot;Data corruption ...  
+6   {\n  &quot;incident_id&quot;: 3321,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;SearchEngine&quot;,\n  &quot;summary&quot;: &quot;SearchEngine down ...  
+7   {\n  &quot;incident_id&quot;: 1111,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate tr...  
+8   {\n  &quot;incident_id&quot;: 7734,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;InventoryAPI&quot;,\n  &quot;summary&quot;: &quot;Stock counts mi...  
+9   {\n  &quot;incident_id&quot;: 6005,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Recommendations-AI&quot;,\n  &quot;summary&quot;: &quot;Model infere...  
+10  {\n  &quot;incident_id&quot;: 2102,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;p95 latenc...  
+11  {\n  &quot;incident_id&quot;: 2106,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;EmailNotifier | s...  
+12  {\n  &quot;incident_id&quot;: 2108,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;OOMKilled twice o...  
+13  {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Replica disk IO...  
+14  {\n  &quot;incident_id&quot;: 3431,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate ch...  
+15  {\n  &quot;incident_id&quot;: 1044,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;API endpoint...  
+16  {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;Delayed reset pas...  
+17  {\n  &quot;incident_id&quot;: 4055,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;Memory leak in Auth...  
+18  {\n  &quot;incident_id&quot;: 2002,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Latency spik...  
+19  {\n  &quot;incident_id&quot;: 5500,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Frontend_React&quot;,\n  &quot;summary&quot;: &quot;CSS not loading ...  
+20  {\n  &quot;incident_id&quot;: 8812,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;UserProfileDB&quot;,\n  &quot;summary&quot;: &quot;Data corruption ...  
+21  {\n  &quot;incident_id&quot;: 3321,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;SearchEngine&quot;,\n  &quot;summary&quot;: &quot;SearchEngine down ...  
+22  {\n  &quot;incident_id&quot;: 1111,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate tr...  
+23  {\n  &quot;incident_id&quot;: 7734,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;InventoryAPI&quot;,\n  &quot;summary&quot;: &quot;Stock counts mi...  
+24  {\n  &quot;incident_id&quot;: 6005,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Recommendations-AI&quot;,\n  &quot;summary&quot;: &quot;Model infere...  
+25  {\n  &quot;incident_id&quot;: 2102,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;p95 latenc...  
+26  {\n  &quot;incident_id&quot;: 2106,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;EmailNotifier | s...  
+27  {\n  &quot;incident_id&quot;: 2108,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;OOMKilled twice o...  
+28  {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Replica disk IO...  
+29  {\n  &quot;incident_id&quot;: 3431,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate ch...  
+30  {\n  &quot;incident_id&quot;: 1044,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;API endpoint...  
+31  {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;Delayed reset pas...  
+32  {\n  &quot;incident_id&quot;: 4055,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;Memory leak in Auth...  
+33  {\n  &quot;incident_id&quot;: 2002,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Latency spik...  
+34  {\n  &quot;incident_id&quot;: 5500,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Frontend_React&quot;,\n  &quot;summary&quot;: &quot;CSS not loading ...  
+35  {\n  &quot;incident_id&quot;: 8812,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;UserProfileDB&quot;,\n  &quot;summary&quot;: &quot;Data corruption ...  
+36  {\n  &quot;incident_id&quot;: 3321,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;SearchEngine&quot;,\n  &quot;summary&quot;: &quot;SearchEngine down ...  
+37  {\n  &quot;incident_id&quot;: 1111,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate tr...  
+38  {\n  &quot;incident_id&quot;: 7734,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;InventoryAPI&quot;,\n  &quot;summary&quot;: &quot;Stock counts mi...  
+39  {\n  &quot;incident_id&quot;: 6005,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;Recommendations-AI&quot;,\n  &quot;summary&quot;: &quot;Model infere...  
+40  {\n  &quot;incident_id&quot;: 2102,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;PaymentGateway_v2&quot;,\n  &quot;summary&quot;: &quot;p95 latenc...  
+41  {\n  &quot;incident_id&quot;: 2106,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;EmailNotifier&quot;,\n  &quot;summary&quot;: &quot;EmailNotifier | s...  
+42  {\n  &quot;incident_id&quot;: 2108,\n  &quot;severity&quot;: &quot;Medium&quot;,\n  &quot;service_name&quot;: &quot;AuthServer&quot;,\n  &quot;summary&quot;: &quot;OOMKilled twice o...  
+43  {\n  &quot;incident_id&quot;: null,\n  &quot;severity&quot;: &quot;Low&quot;,\n  &quot;service_name&quot;: &quot;DatabaseCluster&quot;,\n  &quot;summary&quot;: &quot;Replica disk IO...  
+44  {\n  &quot;incident_id&quot;: 3431,\n  &quot;severity&quot;: &quot;High&quot;,\n  &quot;service_name&quot;: &quot;payment-processor&quot;,\n  &quot;summary&quot;: &quot;Duplicate ch...  
+Full call logs: results/main/calls.jsonl
+</pre></article><article><h2>Code cell 41</h2><details><summary>Show code</summary><pre><code>err_df = error_table(MAIN, INCIDENTS)
+display(err_df if len(err_df) else &#x27;No incorrect target fields in this run.&#x27;)
+print(&#x27;Valid-but-wrong field rows:&#x27;, int(err_df[&#x27;valid_output&#x27;].sum()) if len(err_df) else 0)
+summary_errors = summary_limit_violations(MAIN)
+display(summary_errors if len(summary_errors) else &#x27;All main-model summaries contain at most 12 words.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>      strategy incident_key        field predicted  gold  valid_output  \
+0      A_retry    ORIG-9901  incident_id      None  9901          True   
+1  B_json_mode    ORIG-9901  incident_id      None  9901          True   
+2     C_schema    ORIG-9901  incident_id      None  9901          True   
+
+  hard_case_tags  \
+0                  
+1                  
+2                  
+
+                                                                  explanation  
+0  The output omits the explicit incident identifier 9901 present in the log.  
+1  The output omits the explicit incident identifier 9901 present in the log.  
+2  The output omits the explicit incident identifier 9901 present in the log.  
+Valid-but-wrong field rows: 3
+
+&#x27;All main-model summaries contain at most 12 words.&#x27;</pre></article><article><h2>Code cell 43</h2><details><summary>Show code</summary><pre><code>STRESS = RESULTS/&#x27;stress_tiny&#x27;
+pull(TINY_MODEL)
+run_all(STRESS, TINY_MODEL, INCIDENTS, SYSTEM_PROMPT)
+save_tables(STRESS, INCIDENTS)
+print(&#x27;Main model retained:&#x27;, MODEL)
+</code></pre></details><h3>Saved output</h3><pre>A_retry completed 15 / 15
+
+B_json_mode completed 15 / 15
+
+C_schema completed 15 / 15
+
+Main model retained: qwen3:1.7b-q4_K_M
+</pre></article><article><h2>Code cell 45</h2><details><summary>Show code</summary><pre><code>compare = pd.concat({f&#x27;main ({MODEL})&#x27;: metric_table(MAIN, INCIDENTS), f&#x27;tiny ({TINY_MODEL})&#x27;: metric_table(STRESS, INCIDENTS)}, axis=1)
+display(compare.round(2))
+tiny_err = error_table(STRESS, INCIDENTS)
+display(tiny_err if len(tiny_err) else &#x27;No incorrect target fields in this stress run.&#x27;)
+print(&#x27;Tiny valid-but-wrong field rows:&#x27;, int(tiny_err[&#x27;valid_output&#x27;].sum()) if len(tiny_err) else 0)
+tiny_summary_errors = summary_limit_violations(STRESS)
+display(tiny_summary_errors if len(tiny_summary_errors) else &#x27;All tiny-model summaries contain at most 12 words.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>                      main (qwen3:1.7b-q4_K_M)                       \
+strategy                               A_retry B_json_mode C_schema   
+valid first try %                       100.00      100.00   100.00   
+valid after retries %                   100.00      100.00   100.00   
+mean calls                                1.00        1.00     1.00   
+mean latency s                            1.03        1.05     1.12   
+incident_id acc %                        93.33       93.33    93.33   
+severity acc %                          100.00      100.00   100.00   
+service_name acc %                      100.00      100.00   100.00   
+summary &lt;=12 words %                    100.00      100.00   100.00   
+
+                      tiny (qwen3:0.6b-q4_K_M)                       
+strategy                               A_retry B_json_mode C_schema  
+valid first try %                       100.00      100.00   100.00  
+valid after retries %                   100.00      100.00   100.00  
+mean calls                                1.00        1.00     1.00  
+mean latency s                            0.81        0.80     0.85  
+incident_id acc %                        93.33       93.33    93.33  
+severity acc %                           93.33       93.33    93.33  
+service_name acc %                      100.00      100.00   100.00  
+summary &lt;=12 words %                     93.33       93.33    93.33  
+      strategy incident_key        field predicted  gold  valid_output  \
+0      A_retry     NEW-1-12  incident_id    123456  None          True   
+1      A_retry     NEW-2-07     severity    Medium  High          True   
+2  B_json_mode     NEW-1-12  incident_id    123456  None          True   
+3  B_json_mode     NEW-2-07     severity    Medium  High          True   
+4     C_schema     NEW-1-12  incident_id    123456  None          True   
+5     C_schema     NEW-2-07     severity    Medium  High          True   
+
+                                                     hard_case_tags  \
+0                                                  H1_missing_field   
+1  H2_contradictory_severity, H3_format_noise, H4_ambiguous_service   
+2                                                  H1_missing_field   
+3  H2_contradictory_severity, H3_format_noise, H4_ambiguous_service   
+4                                                  H1_missing_field   
+5  H2_contradictory_severity, H3_format_noise, H4_ambiguous_service   
+
+                                                                                     explanation  
+0           The record invents or misreads an incident identifier; missing IDs must remain null.  
+1  The written label conflicts with impact; the severity guide&#x27;s upward override takes priority.  
+2           The record invents or misreads an incident identifier; missing IDs must remain null.  
+3  The written label conflicts with impact; the severity guide&#x27;s upward override takes priority.  
+4           The record invents or misreads an incident identifier; missing IDs must remain null.  
+5  The written label conflicts with impact; the severity guide&#x27;s upward override takes priority.  
+Tiny valid-but-wrong field rows: 6
+
+      strategy incident_key  \
+0      A_retry     NEW-1-08   
+1  B_json_mode     NEW-1-08   
+2     C_schema     NEW-1-08   
+
+                                                                                         summary  \
+0  AuthServer OOMKilled twice within 40m on auth pods 2 and 7, with no credential leak detected.   
+1  AuthServer OOMKilled twice within 40m on auth pods 2 and 7, with no credential leak detected.   
+2  AuthServer OOMKilled twice within 40m on auth pods 2 and 7, with no credential leak detected.   
+
+   word_count  
+0          16  
+1          16  
+2          16  </pre></article></main></body></html>

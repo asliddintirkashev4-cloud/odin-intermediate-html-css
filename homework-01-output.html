@@ -1,0 +1,446 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Model profiling / Asliddin Tirkashev</title><link rel="stylesheet" href="profile-coursework.css"><body class="output-page"><main><a href="portfolio.html#homework">Back to homework</a><h1>Laboratory 01 / Model profiling</h1><p>Five model profiles, quantisation and size comparisons, parallel serving and a model card.</p><p>Saved coursework outputs from 4 November 2026. This page does not rerun the model experiments.</p><a href="homework-01.ipynb" download>Download notebook</a><article><h2>Code cell 4</h2><details><summary>Show code</summary><pre><code>import importlib.util, sys, subprocess
+try:
+    IN_COLAB=importlib.util.find_spec(&#x27;google.colab&#x27;) is not None
+except ModuleNotFoundError:
+    IN_COLAB=False
+if IN_COLAB:
+    subprocess.check_call([sys.executable,&#x27;-m&#x27;,&#x27;pip&#x27;,&#x27;-q&#x27;,&#x27;install&#x27;,&#x27;requests==2.32.5&#x27;,&#x27;pandas==2.2.3&#x27;,&#x27;pydantic==2.14.1&#x27;,&#x27;langchain-ollama==1.1.0&#x27;,&#x27;langchain-core==1.7.4&#x27;])
+import requests, pandas as pd
+import importlib.metadata
+print(&#x27;Python&#x27;,sys.version.split()[0],&#x27;requests&#x27;,requests.__version__,&#x27;pandas&#x27;,pd.__version__)
+print(&#x27;langchain-ollama&#x27;,importlib.metadata.version(&#x27;langchain-ollama&#x27;),&#x27;langchain-core&#x27;,importlib.metadata.version(&#x27;langchain-core&#x27;),&#x27;pydantic&#x27;,importlib.metadata.version(&#x27;pydantic&#x27;))
+</code></pre></details><h3>Saved output</h3><pre>Python 3.12.14 requests 2.32.5 pandas 2.2.3
+langchain-ollama 1.1.0 langchain-core 1.7.4 pydantic 2.14.1
+</pre></article><article><h2>Code cell 6</h2><details><summary>Show code</summary><pre><code>import os, pathlib, platform, shutil, time, json
+TRACK=os.environ.get(&#x27;GENAI_TRACK&#x27;,&#x27;CPU&#x27;).upper()
+os.environ[&#x27;GENAI_TRACK&#x27;]=TRACK
+if IN_COLAB:os.environ[&#x27;GENAI_IN_COLAB&#x27;]=&#x27;1&#x27;
+USE_DRIVE=False
+PRACTICE=&#x27;L1&#x27;
+HERE=pathlib.Path.cwd()
+DATA=pathlib.Path(os.environ.get(&#x27;GENAI_DATA&#x27;,str(HERE.parent/&#x27;data/chaoscorp&#x27;)))
+RESULTS=pathlib.Path(os.environ.get(&#x27;GENAI_L1_RESULTS&#x27;,str(HERE/&#x27;results&#x27;)))
+OLLAMA_URL=os.environ.get(&#x27;OLLAMA_URL&#x27;,&#x27;http://localhost:11434&#x27; if IN_COLAB else &#x27;http://localhost:11435&#x27;)
+print(&#x27;Track:&#x27;,TRACK,&#x27;Runtime:&#x27;,platform.platform())
+</code></pre></details><h3>Saved output</h3><pre>Track: CPU Runtime: macOS-26.5.1-arm64-arm-64bit
+</pre></article><article><h2>Code cell 8</h2><details><summary>Show code</summary><pre><code>if shutil.which(&#x27;nvidia-smi&#x27;):
+    info=subprocess.run([&#x27;nvidia-smi&#x27;,&#x27;--query-gpu=name,memory.total&#x27;,&#x27;--format=csv,noheader&#x27;],capture_output=True,text=True)
+    print(info.stdout.strip() or info.stderr.strip())
+else:
+    assert TRACK==&#x27;CPU&#x27;, &#x27;GPU track requires an NVIDIA GPU runtime.&#x27;
+    print(&#x27;NVIDIA GPU/VRAM: not applicable. CPU track selected.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>NVIDIA GPU/VRAM: not applicable. CPU track selected.
+</pre></article><article><h2>Code cell 10</h2><details><summary>Show code</summary><pre><code>import zipfile
+if not DATA.exists():
+    candidates=[HERE/&#x27;data/chaoscorp&#x27;,HERE.parent/&#x27;data/chaoscorp&#x27;,HERE/&#x27;chaoscorp&#x27;,pathlib.Path(&#x27;/content/chaoscorp&#x27;)]
+    DATA=next((p for p in candidates if p.exists()),DATA)
+if not DATA.exists() and IN_COLAB:
+    from google.colab import files
+    uploaded=files.upload()
+    with zipfile.ZipFile(next(iter(uploaded))) as z:
+        assert &#x27;chaoscorp/README.md&#x27; in z.namelist()
+        z.extractall(&#x27;/content&#x27;)
+    DATA=pathlib.Path(&#x27;/content/chaoscorp&#x27;)
+assert (DATA/&#x27;incidents_original10.json&#x27;).exists(), f&#x27;Data missing: {DATA}; set GENAI_DATA.&#x27;
+RESULTS.mkdir(parents=True,exist_ok=True)
+print(&#x27;Data:&#x27;,DATA,&#x27;Results:&#x27;,RESULTS)
+</code></pre></details><h3>Saved output</h3><pre>Data: ../data/chaoscorp Results: results
+</pre></article><article><h2>Code cell 12</h2><details><summary>Show code</summary><pre><code>if IN_COLAB:
+    if not shutil.which(&#x27;ollama&#x27;):
+        subprocess.run([&#x27;apt-get&#x27;,&#x27;-qq&#x27;,&#x27;install&#x27;,&#x27;-y&#x27;,&#x27;zstd&#x27;,&#x27;pciutils&#x27;],check=True)
+        subprocess.run(&#x27;curl -fsSL https://ollama.com/install.sh | sh&#x27;,shell=True,check=True)
+    ollama=subprocess.Popen([&#x27;ollama&#x27;,&#x27;serve&#x27;],env={**os.environ,&#x27;OLLAMA_NUM_PARALLEL&#x27;:&#x27;4&#x27; if TRACK==&#x27;GPU&#x27; else &#x27;2&#x27;},stdout=open(&#x27;/content/ollama.log&#x27;,&#x27;w&#x27;),stderr=subprocess.STDOUT)
+    for _ in range(60):
+        try:
+            response=requests.get(OLLAMA_URL+&#x27;/api/version&#x27;,timeout=2);response.raise_for_status();break
+        except requests.RequestException:time.sleep(1)
+response=requests.get(OLLAMA_URL+&#x27;/api/version&#x27;,timeout=10);response.raise_for_status()
+print(response.json())
+</code></pre></details><h3>Saved output</h3><pre>{&#x27;version&#x27;: &#x27;0.17.4&#x27;}
+</pre></article><article><h2>Code cell 14</h2><details><summary>Show code</summary><pre><code>&quot;&quot;&quot;Lab 1 GPU/CPU-track profiling. Real Ollama responses, saved incrementally.&quot;&quot;&quot;
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+import platform
+import shutil
+import statistics
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
+import requests
+import pandas as pd
+
+HERE=Path(__file__).resolve().parent if &#x27;__file__&#x27; in globals() else Path.cwd()
+DATA=globals().get(&#x27;DATA&#x27;,Path(os.environ.get(&#x27;GENAI_DATA&#x27;,str(HERE.parent/&#x27;data/chaoscorp&#x27;))))
+RESULTS=globals().get(&#x27;RESULTS&#x27;,Path(os.environ.get(&#x27;GENAI_L1_RESULTS&#x27;,str(HERE/&#x27;results&#x27;))))
+OLLAMA_URL=globals().get(&#x27;OLLAMA_URL&#x27;,os.environ.get(&#x27;OLLAMA_URL&#x27;,&#x27;http://localhost:11435&#x27;)).rstrip(&#x27;/&#x27;)
+TRACK=os.environ.get(&#x27;GENAI_TRACK&#x27;,&#x27;CPU&#x27;).upper()
+if TRACK not in (&#x27;CPU&#x27;,&#x27;GPU&#x27;):raise ValueError(&#x27;GENAI_TRACK must be CPU or GPU&#x27;)
+IN_COLAB=bool(os.environ.get(&#x27;COLAB_RELEASE_TAG&#x27;) or os.environ.get(&#x27;COLAB_GPU&#x27;) or os.environ.get(&#x27;GENAI_IN_COLAB&#x27;))
+RUNTIME=os.environ.get(&#x27;GENAI_RUNTIME&#x27;,(&#x27;Google Colab &#x27; if IN_COLAB else &#x27;local &#x27;)+TRACK)
+if TRACK==&#x27;GPU&#x27;:
+    EXP_A=[&#x27;llama3.2:3b-instruct-q4_K_M&#x27;,&#x27;llama3.2:3b-instruct-q8_0&#x27;,&#x27;llama3.2:3b-instruct-fp16&#x27;]
+    EXP_B=[&#x27;qwen3:1.7b-q4_K_M&#x27;,&#x27;qwen3:4b-q4_K_M&#x27;,&#x27;qwen3:8b-q4_K_M&#x27;]
+else:
+    EXP_A=[&#x27;llama3.2:1b-instruct-q4_K_M&#x27;,&#x27;llama3.2:1b-instruct-q8_0&#x27;,&#x27;llama3.2:1b-instruct-fp16&#x27;]
+    EXP_B=[&#x27;qwen3:0.6b-q4_K_M&#x27;,&#x27;qwen3:1.7b-q4_K_M&#x27;]
+N_RUNS=5 if TRACK==&#x27;GPU&#x27; else 3
+N_PARALLEL=4 if TRACK==&#x27;GPU&#x27; else 2
+OPTIONS={&#x27;temperature&#x27;:0,&#x27;seed&#x27;:42,&#x27;num_ctx&#x27;:4096 if TRACK==&#x27;GPU&#x27; else 2048,
+         &#x27;num_predict&#x27;:256 if TRACK==&#x27;GPU&#x27; else 200,&#x27;num_gpu&#x27;:99 if TRACK==&#x27;GPU&#x27; else 0}
+PROMPT=&#x27;Explain to a new on-call engineer, in at most 120 words, why a read replica can show higher latency than the primary database.&#x27;
+
+def read_jsonl(path):
+    p=Path(path)
+    return [json.loads(line) for line in p.read_text().splitlines() if line.strip()] if p.exists() else []
+
+def append_jsonl(path,row):
+    p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
+    with p.open(&#x27;a&#x27;,encoding=&#x27;utf-8&#x27;) as f:
+        f.write(json.dumps(row,ensure_ascii=False,allow_nan=False)+&#x27;\n&#x27;);f.flush();os.fsync(f.fileno())
+
+def decode_tps(resp):
+    return resp[&#x27;eval_count&#x27;]/(resp[&#x27;eval_duration&#x27;]/1e9) if resp.get(&#x27;eval_duration&#x27;,0)&gt;0 else 0.0
+
+def prompt_tps(resp):
+    return resp[&#x27;prompt_eval_count&#x27;]/(resp[&#x27;prompt_eval_duration&#x27;]/1e9) if resp.get(&#x27;prompt_eval_duration&#x27;,0)&gt;0 else 0.0
+
+def api(path,body=None,timeout=900):
+    r=requests.get(OLLAMA_URL+path,timeout=timeout) if body is None else requests.post(OLLAMA_URL+path,json=body,timeout=timeout)
+    r.raise_for_status();return r.json()
+
+def loaded_models():
+    return api(&#x27;/api/ps&#x27;,timeout=10).get(&#x27;models&#x27;,[])
+
+def unload(model):
+    return api(&#x27;/api/generate&#x27;,{&#x27;model&#x27;:model,&#x27;keep_alive&#x27;:0},timeout=90)
+
+def unload_all():
+    for row in loaded_models():unload(row[&#x27;name&#x27;])
+    for _ in range(60):
+        if not loaded_models():return
+        time.sleep(.2)
+    raise RuntimeError(&#x27;A model remained loaded before the next benchmark.&#x27;)
+
+def pull(model):
+    return api(&#x27;/api/pull&#x27;,{&#x27;model&#x27;:model,&#x27;stream&#x27;:False},timeout=3600)
+
+def chat(model,messages,phase,options=None,case=None):
+    body={&#x27;model&#x27;:model,&#x27;messages&#x27;:messages,&#x27;stream&#x27;:False,&#x27;keep_alive&#x27;:&#x27;10m&#x27;,&#x27;options&#x27;:{**OPTIONS,**(options or {})}}
+    if model.startswith(&#x27;qwen3&#x27;):body[&#x27;think&#x27;]=False
+    started=time.perf_counter();response=api(&#x27;/api/chat&#x27;,body)
+    elapsed=time.perf_counter()-started
+    append_jsonl(RESULTS/&#x27;responses.jsonl&#x27;,{&#x27;timestamp_utc&#x27;:datetime.now(timezone.utc).isoformat(),&#x27;model&#x27;:model,&#x27;phase&#x27;:phase,&#x27;case&#x27;:case,&#x27;options&#x27;:body[&#x27;options&#x27;],&#x27;wall_s&#x27;:elapsed,&#x27;response&#x27;:response})
+    return response
+
+def run(model,prompt,phase=&#x27;timed&#x27;,case=None):
+    &quot;&quot;&quot;Standard prompt call with fixed settings; returns Ollama&#x27;s full response.&quot;&quot;&quot;
+    return chat(model,[{&#x27;role&#x27;:&#x27;user&#x27;,&#x27;content&#x27;:prompt}],phase,case=case)
+
+def memory(model):
+    row=next((r for r in loaded_models() if r[&#x27;name&#x27;]==model or r.get(&#x27;model&#x27;)==model),None)
+    if row is None:raise RuntimeError(f&#x27;Loaded model missing from /api/ps: {model}&#x27;)
+    size=row.get(&#x27;size&#x27;,0);vram=row.get(&#x27;size_vram&#x27;,0)
+    if TRACK==&#x27;CPU&#x27; and vram:raise RuntimeError(f&#x27;Declared CPU run used GPU memory ({vram} bytes).&#x27;)
+    share=vram/size if size else 0
+    processor=&#x27;100% CPU&#x27; if share==0 else (&#x27;100% GPU&#x27; if share&gt;=.99 else f&#x27;{100*share:.1f}% GPU / {100*(1-share):.1f}% CPU&#x27;)
+    return {&#x27;size_gb&#x27;:size/1e9,&#x27;vram_gb&#x27;:vram/1e9,&#x27;gpu_share&#x27;:vram/size if size else 0,
+            &#x27;processor&#x27;:processor,&#x27;gpu_comparable&#x27;:TRACK!=&#x27;GPU&#x27; or share&gt;=.99,&#x27;ollama_ps&#x27;:row}
+
+def nvidia_memory_gb():
+    if TRACK!=&#x27;GPU&#x27; or not shutil.which(&#x27;nvidia-smi&#x27;):return None
+    result=subprocess.run([&#x27;nvidia-smi&#x27;,&#x27;--query-gpu=memory.used&#x27;,&#x27;--format=csv,noheader,nounits&#x27;],capture_output=True,text=True,check=True)
+    return float(result.stdout.splitlines()[0].strip())*1024**2/1e9
+
+def mean_sd(values):
+    return statistics.mean(values),statistics.pstdev(values)
+
+def experiment_identity():
+    &quot;&quot;&quot;Inputs which must match before reusing measurements.&quot;&quot;&quot;
+    return {&#x27;version&#x27;:1,&#x27;track&#x27;:TRACK,&#x27;options&#x27;:OPTIONS,&#x27;standard_prompt&#x27;:PROMPT,
+            &#x27;timed_runs&#x27;:N_RUNS,&#x27;parallel_requests&#x27;:[1,N_PARALLEL],
+            &#x27;experiment_a&#x27;:EXP_A,&#x27;experiment_b&#x27;:EXP_B,
+            &#x27;incidents_sha256&#x27;:hashlib.sha256((DATA/&#x27;incidents_original10.json&#x27;).read_bytes()).hexdigest(),
+            &#x27;severity_policy_sha256&#x27;:hashlib.sha256((DATA/&#x27;policies/policy_severity.md&#x27;).read_bytes()).hexdigest()}
+
+def ensure_cache_identity():
+    identity=experiment_identity()
+    path=RESULTS/&#x27;experiment_manifest.json&#x27;
+    if path.exists():
+        if json.loads(path.read_text())[&#x27;identity&#x27;]!=identity:
+            raise RuntimeError(&#x27;Cached experiment configuration/identity differs; use a new results folder.&#x27;)
+    else:
+        if any(read_jsonl(RESULTS/name) for name in [&#x27;profiles.jsonl&#x27;,&#x27;parallel.jsonl&#x27;,&#x27;responses.jsonl&#x27;]):
+            raise RuntimeError(&#x27;Legacy cached measurements have no identity manifest; audit them or use a new results folder.&#x27;)
+        RESULTS.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps({&#x27;identity&#x27;:identity,&#x27;established_utc&#x27;:datetime.now(timezone.utc).isoformat(),
+                                    &#x27;established_by&#x27;:&#x27;before model calls&#x27;},indent=2))
+    return identity
+
+def severity_accuracy(model):
+    incidents=json.loads((DATA/&#x27;incidents_original10.json&#x27;).read_text())
+    guide=(DATA/&#x27;policies/policy_severity.md&#x27;).read_text()
+    predictions=[]
+    for inc in incidents:
+        r=chat(model,[{&#x27;role&#x27;:&#x27;system&#x27;,&#x27;content&#x27;:&#x27;You classify incident severity using this guide:\n&#x27;+guide},
+                      {&#x27;role&#x27;:&#x27;user&#x27;,&#x27;content&#x27;:inc[&#x27;raw_log&#x27;]+&#x27;\n\nAnswer with exactly one word: High, Medium or Low.&#x27;}],
+               &#x27;severity&#x27;,options={&#x27;num_predict&#x27;:10},case=inc[&#x27;incident_key&#x27;])
+        answer=r[&#x27;message&#x27;][&#x27;content&#x27;].strip()
+        predicted=next((s for s in (&#x27;High&#x27;,&#x27;Medium&#x27;,&#x27;Low&#x27;) if answer.casefold()==s.casefold()),None)
+        predictions.append({&#x27;incident_key&#x27;:inc[&#x27;incident_key&#x27;],&#x27;raw&#x27;:answer,&#x27;predicted&#x27;:predicted,&#x27;gold&#x27;:inc[&#x27;gold&#x27;][&#x27;severity&#x27;],&#x27;correct&#x27;:predicted==inc[&#x27;gold&#x27;][&#x27;severity&#x27;]})
+    return predictions
+
+def profile_model(model,experiment):
+    ensure_cache_identity()
+    path=RESULTS/&#x27;profiles.jsonl&#x27;
+    old=next((r for r in read_jsonl(path) if r[&#x27;model&#x27;]==model and r[&#x27;experiment&#x27;]==experiment),None)
+    if old is not None:
+        if old.get(&#x27;options&#x27;)!=OPTIONS:raise RuntimeError(&#x27;Cache options differ; use a new result folder.&#x27;)
+        return old
+    unload_all()
+    before=nvidia_memory_gb()
+    load=chat(model,[{&#x27;role&#x27;:&#x27;user&#x27;,&#x27;content&#x27;:&#x27;Hi&#x27;}],&#x27;load&#x27;,{&#x27;num_predict&#x27;:1})
+    after=nvidia_memory_gb()
+    mem=memory(model)
+    run(model,PROMPT,&#x27;warmup&#x27;)
+    runs=[run(model,PROMPT,&#x27;timed&#x27;,case=i+1) for i in range(N_RUNS)]
+    predictions=severity_accuracy(model)
+    row={&#x27;model&#x27;:model,&#x27;experiment&#x27;:experiment,&#x27;track&#x27;:TRACK,&#x27;options&#x27;:OPTIONS,&#x27;runs&#x27;:N_RUNS,
+         **mem,&#x27;load_s&#x27;:load[&#x27;load_duration&#x27;]/1e9,&#x27;severity_correct_of_10&#x27;:sum(p[&#x27;correct&#x27;] for p in predictions),
+         &#x27;nvidia_memory_before_gb&#x27;:before,&#x27;nvidia_memory_after_gb&#x27;:after,
+         &#x27;nvidia_vram_delta_gb&#x27;:after-before if before is not None and after is not None else None,
+         &#x27;severity_predictions&#x27;:predictions,&#x27;raw_timed_responses&#x27;:runs}
+    for metric,values in {&#x27;decode_tps&#x27;:[decode_tps(r) for r in runs],
+                          &#x27;prompt_tps&#x27;:[prompt_tps(r) for r in runs],
+                          &#x27;warm_ttft_s&#x27;:[r[&#x27;prompt_eval_duration&#x27;]/1e9 for r in runs]}.items():
+        row[metric+&#x27;_mean&#x27;],row[metric+&#x27;_sd&#x27;]=mean_sd(values)
+    append_jsonl(path,row)
+    unload(model)
+    print(model,&#x27;severity&#x27;,row[&#x27;severity_correct_of_10&#x27;],&#x27;/10; decode&#x27;,round(row[&#x27;decode_tps_mean&#x27;],2),flush=True)
+    return row
+
+def choose_model(rows):
+    candidates=[r for r in rows if r[&#x27;experiment&#x27;]==&#x27;B&#x27; and r.get(&#x27;gpu_comparable&#x27;,True)]
+    if not candidates:raise RuntimeError(&#x27;No comparable Qwen model measurements are available.&#x27;)
+    # Accuracy first, then measured speed and smaller memory on a tie.
+    return max(candidates,key=lambda r:(r[&#x27;severity_correct_of_10&#x27;],r[&#x27;decode_tps_mean&#x27;],-r[&#x27;size_gb&#x27;]))
+
+def parallel_test(model,n):
+    ensure_cache_identity()
+    old=next((r for r in read_jsonl(RESULTS/&#x27;parallel.jsonl&#x27;) if r[&#x27;model&#x27;]==model and r[&#x27;parallel_requests&#x27;]==n),None)
+    if old is not None:return old
+    chat(model,[{&#x27;role&#x27;:&#x27;user&#x27;,&#x27;content&#x27;:&#x27;Hi&#x27;}],&#x27;parallel_load&#x27;,{&#x27;num_predict&#x27;:1})
+    memory(model)
+    started=time.perf_counter()
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        responses=list(pool.map(lambda i:chat(model,[{&#x27;role&#x27;:&#x27;user&#x27;,&#x27;content&#x27;:PROMPT}],f&#x27;parallel_{n}&#x27;,case=i+1),range(n)))
+    wall=time.perf_counter()-started
+    speeds=[decode_tps(r) for r in responses]
+    row={&#x27;model&#x27;:model,&#x27;parallel_requests&#x27;:n,&#x27;per_request_tps&#x27;:speeds,&#x27;per_request_tps_mean&#x27;:statistics.mean(speeds),
+         &#x27;aggregate_tps&#x27;:sum(r[&#x27;eval_count&#x27;] for r in responses)/wall,&#x27;wall_s&#x27;:wall,
+         &#x27;tokens_total&#x27;:sum(r[&#x27;eval_count&#x27;] for r in responses),&#x27;memory&#x27;:memory(model),&#x27;nvidia_memory_gb&#x27;:nvidia_memory_gb(),&#x27;responses&#x27;:responses}
+    append_jsonl(RESULTS/&#x27;parallel.jsonl&#x27;,row)
+    return row
+
+def save_summary():
+    rows=read_jsonl(RESULTS/&#x27;profiles.jsonl&#x27;)
+    flat=[{k:v for k,v in r.items() if k not in (&#x27;options&#x27;,&#x27;severity_predictions&#x27;,&#x27;raw_timed_responses&#x27;,&#x27;ollama_ps&#x27;)} for r in rows]
+    pd.DataFrame(flat).to_csv(RESULTS/&#x27;profiles.csv&#x27;,index=False)
+    if len(rows)!=len(EXP_A+EXP_B):raise RuntimeError(&#x27;All model measurements for this track are needed.&#x27;)
+    choice=choose_model(rows)
+    parallel=[r for r in read_jsonl(RESULTS/&#x27;parallel.jsonl&#x27;) if r[&#x27;model&#x27;]==choice[&#x27;model&#x27;]]
+    if len(parallel)&lt;2:raise RuntimeError(&#x27;Both parallel tests are needed.&#x27;)
+    a4=next(r for r in rows if r[&#x27;model&#x27;]==EXP_A[0]);a16=next(r for r in rows if r[&#x27;model&#x27;]==EXP_A[2])
+    ratio=a16[&#x27;size_gb&#x27;]/a4[&#x27;size_gb&#x27;]
+    faster=a4[&#x27;decode_tps_mean&#x27;]/a16[&#x27;decode_tps_mean&#x27;]
+    small=next(r for r in rows if r[&#x27;model&#x27;]==EXP_B[0]);large=next(r for r in rows if r[&#x27;model&#x27;]==EXP_B[-1])
+    pair=next(r for r in parallel if r[&#x27;parallel_requests&#x27;]==N_PARALLEL)
+    answer_tokens=200
+    capacity=pair[&#x27;aggregate_tps&#x27;]*20/answer_tokens
+    observed_mean_tokens=pair[&#x27;tokens_total&#x27;]/pair[&#x27;parallel_requests&#x27;]
+    answers=[
+      f&quot;I measured {a4[&#x27;size_gb&#x27;]:.2f} GB for q4_K_M and {a16[&#x27;size_gb&#x27;]:.2f} GB for fp16, a {ratio:.2f}-fold memory ratio. Their decode speeds were {a4[&#x27;decode_tps_mean&#x27;]:.2f} and {a16[&#x27;decode_tps_mean&#x27;]:.2f} tokens/s, respectively ({faster:.2f}x). Severity accuracy was {a4[&#x27;severity_correct_of_10&#x27;]}/10 versus {a16[&#x27;severity_correct_of_10&#x27;]}/10. I evaluate this trade-off for these logs rather than assuming lower precision always preserves quality.&quot;,
+      f&quot;In the Qwen3 size comparison, {small[&#x27;model&#x27;]} scored {small[&#x27;severity_correct_of_10&#x27;]}/10 at {small[&#x27;decode_tps_mean&#x27;]:.2f} tokens/s, while {large[&#x27;model&#x27;]} scored {large[&#x27;severity_correct_of_10&#x27;]}/10 at {large[&#x27;decode_tps_mean&#x27;]:.2f} tokens/s. I choose {choice[&#x27;model&#x27;]} by highest observed accuracy, then speed and memory efficiency on a tie. The ten-incident sample limits the strength of this comparison.&quot;,
+      f&quot;The measured {pair[&#x27;parallel_requests&#x27;]}-request batch produced {pair[&#x27;tokens_total&#x27;]} tokens total, averaging {observed_mean_tokens:.1f} tokens per reply, in {pair[&#x27;wall_s&#x27;]:.2f} seconds. Aggregate throughput was {pair[&#x27;aggregate_tps&#x27;]:.2f} tokens/s. For a hypothetical 200-token reply, a throughput-only projection gives {pair[&#x27;aggregate_tps&#x27;]:.2f} x 20 / 200 = {capacity:.1f} users sending one request every 20 seconds, before safety headroom. The observed reply lengths do not verify a five-second target for 200-token replies. I would test that response length and a realistic arrival pattern before claiming this capacity.&quot;,
+      f&quot;I select {choice[&#x27;model&#x27;]} for later work: it scored {choice[&#x27;severity_correct_of_10&#x27;]}/10, decoded at {choice[&#x27;decode_tps_mean&#x27;]:.2f} tokens/s and occupied {choice[&#x27;size_gb&#x27;]:.2f} GB according to Ollama, including {choice[&#x27;vram_gb&#x27;]:.2f} GB of model GPU memory. This is a measured {RUNTIME} result. I keep the model tag and settings fixed in the next tasks.&quot;
+    ]
+    card={&#x27;model&#x27;:choice[&#x27;model&#x27;],&#x27;track&#x27;:TRACK,&#x27;runtime&#x27;:RUNTIME,&#x27;decode_tps&#x27;:choice[&#x27;decode_tps_mean&#x27;],
+          &#x27;size_gb&#x27;:choice[&#x27;size_gb&#x27;],&#x27;vram_gb&#x27;:choice[&#x27;vram_gb&#x27;],&#x27;severity_correct_of_10&#x27;:choice[&#x27;severity_correct_of_10&#x27;],
+          &#x27;reason_for_choice&#x27;:f&quot;I selected highest measured severity accuracy among Qwen size candidates, breaking ties by measured speed and memory efficiency; accuracy {choice[&#x27;severity_correct_of_10&#x27;]}/10, speed {choice[&#x27;decode_tps_mean&#x27;]:.2f} tok/s, memory {choice[&#x27;size_gb&#x27;]:.2f} GB.&quot;}
+    (RESULTS/&#x27;analysis_answers.json&#x27;).write_text(json.dumps(answers,indent=2))
+    (RESULTS/&#x27;model_card.json&#x27;).write_text(json.dumps(card,indent=2))
+    return card
+
+def langchain_call(model):
+    from langchain_ollama import ChatOllama
+    llm=ChatOllama(model=model,base_url=OLLAMA_URL,temperature=0,seed=42,num_ctx=OPTIONS[&#x27;num_ctx&#x27;],num_predict=OPTIONS[&#x27;num_predict&#x27;],num_gpu=OPTIONS[&#x27;num_gpu&#x27;],
+                   **({&#x27;reasoning&#x27;:False} if model.startswith(&#x27;qwen3&#x27;) else {}))
+    started=time.perf_counter();response=llm.invoke(PROMPT)
+    result={&#x27;model&#x27;:model,&#x27;wall_s&#x27;:time.perf_counter()-started,&#x27;content&#x27;:response.content,
+            &#x27;response_metadata&#x27;:response.response_metadata,&#x27;usage_metadata&#x27;:response.usage_metadata}
+    (RESULTS/&#x27;langchain_response.json&#x27;).write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    return result
+
+def main():
+    global OLLAMA_URL
+    parser=argparse.ArgumentParser();parser.add_argument(&#x27;--url&#x27;);parser.add_argument(&#x27;--pull&#x27;,action=&#x27;store_true&#x27;);parser.add_argument(&#x27;--profile-only&#x27;,action=&#x27;store_true&#x27;)
+    args=parser.parse_args()
+    if args.url:OLLAMA_URL=args.url.rstrip(&#x27;/&#x27;)
+    RESULTS.mkdir(parents=True,exist_ok=True)
+    ensure_cache_identity()
+    env={&#x27;track&#x27;:TRACK,&#x27;runtime&#x27;:RUNTIME,&#x27;platform&#x27;:platform.platform(),&#x27;ollama&#x27;:api(&#x27;/api/version&#x27;),
+         &#x27;url&#x27;:OLLAMA_URL,&#x27;options&#x27;:OPTIONS,&#x27;parallel_server_setting&#x27;:f&#x27;OLLAMA_NUM_PARALLEL={N_PARALLEL}; dedicated course server&#x27;,
+         &#x27;created_utc&#x27;:datetime.now(timezone.utc).isoformat()}
+    if TRACK==&#x27;GPU&#x27; and shutil.which(&#x27;nvidia-smi&#x27;):
+        env[&#x27;nvidia_device&#x27;]=subprocess.run([&#x27;nvidia-smi&#x27;,&#x27;--query-gpu=name,memory.total,driver_version&#x27;,&#x27;--format=csv,noheader&#x27;],capture_output=True,text=True,check=True).stdout.strip()
+    runtime_path=RESULTS/&#x27;runtime.json&#x27;
+    if not runtime_path.exists():
+        runtime_path.write_text(json.dumps(env,indent=2))
+    rows=[]
+    for experiment,models in [(&#x27;A&#x27;,EXP_A),(&#x27;B&#x27;,EXP_B)]:
+        for model in models:
+            if args.pull:
+                print(&#x27;Preparing model:&#x27;, model, flush=True)
+                pull(model)
+            rows.append(profile_model(model,experiment))
+    if args.profile_only:return
+    choice=choose_model(rows)
+    unload_all()
+    for n in [1,N_PARALLEL]:print(parallel_test(choice[&#x27;model&#x27;],n),flush=True)
+    card=save_summary()
+    if not (RESULTS/&#x27;langchain_response.json&#x27;).exists():print(langchain_call(card[&#x27;model&#x27;]),flush=True)
+    unload_all();print(&#x27;Lab1 complete:&#x27;,RESULTS,flush=True)
+
+
+print(&#x27;Profiling helpers loaded; every real model response is retained in responses.jsonl.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>Profiling helpers loaded; every real model response is retained in responses.jsonl.
+</pre></article><article><h2>Code cell 18</h2><details><summary>Show code</summary><pre><code>def decode_tps(resp):
+    return resp[&#x27;eval_count&#x27;]/(resp[&#x27;eval_duration&#x27;]/1e9) if resp.get(&#x27;eval_duration&#x27;,0)&gt;0 else 0.0
+
+def prompt_tps(resp):
+    return resp[&#x27;prompt_eval_count&#x27;]/(resp[&#x27;prompt_eval_duration&#x27;]/1e9) if resp.get(&#x27;prompt_eval_duration&#x27;,0)&gt;0 else 0.0
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 19</h2><details><summary>Show code</summary><pre><code># ✅ Check (do not edit)
+fake = {&quot;eval_count&quot;: 100, &quot;eval_duration&quot;: 2_000_000_000, &quot;prompt_eval_count&quot;: 300, &quot;prompt_eval_duration&quot;: 500_000_000}
+assert decode_tps(fake) is not None and abs(decode_tps(fake) - 50) &lt; 1e-6, &quot;decode_tps should be 50 for this example&quot;
+assert prompt_tps(fake) is not None and abs(prompt_tps(fake) - 600) &lt; 1e-6, &quot;prompt_tps should be 600 for this example&quot;
+print(&quot;✅ Both formulas are correct.&quot;)</code></pre></details><h3>Saved output</h3><pre>✅ Both formulas are correct.
+</pre></article><article><h2>Code cell 21</h2><details><summary>Show code</summary><pre><code>print(&#x27;Experiment A:&#x27;,EXP_A)
+print(&#x27;Experiment B:&#x27;,EXP_B)
+print(&#x27;Timed repetitions:&#x27;,N_RUNS)
+available={m[&#x27;name&#x27;] for m in api(&#x27;/api/tags&#x27;)[&#x27;models&#x27;]}
+for model in EXP_A+EXP_B:
+    if model not in available:
+        print(&#x27;Downloading:&#x27;,model,flush=True)
+        pull(model)
+</code></pre></details><h3>Saved output</h3><pre>Experiment A: [&#x27;llama3.2:1b-instruct-q4_K_M&#x27;, &#x27;llama3.2:1b-instruct-q8_0&#x27;, &#x27;llama3.2:1b-instruct-fp16&#x27;]
+Experiment B: [&#x27;qwen3:0.6b-q4_K_M&#x27;, &#x27;qwen3:1.7b-q4_K_M&#x27;]
+Timed repetitions: 3
+</pre></article><article><h2>Code cell 23</h2><details><summary>Show code</summary><pre><code>print(&#x27;Fixed settings:&#x27;,OPTIONS)
+print(&#x27;Standard prompt:&#x27;,PROMPT)
+print(&#x27;Measurement phases: load, standard-prompt warm-up,&#x27;,N_RUNS,&#x27;timed calls, 10 severity checks.&#x27;)
+print(&#x27;Timing means and population SDs come from Ollama response fields, not token estimates.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>Fixed settings: {&#x27;temperature&#x27;: 0, &#x27;seed&#x27;: 42, &#x27;num_ctx&#x27;: 2048, &#x27;num_predict&#x27;: 200, &#x27;num_gpu&#x27;: 0}
+Standard prompt: Explain to a new on-call engineer, in at most 120 words, why a read replica can show higher latency than the primary database.
+Measurement phases: load, standard-prompt warm-up, 3 timed calls, 10 severity checks.
+Timing means and population SDs come from Ollama response fields, not token estimates.
+</pre></article><article><h2>Code cell 25</h2><details><summary>Show code</summary><pre><code>for model in EXP_A:
+    profile_model(model,&#x27;A&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 27</h2><details><summary>Show code</summary><pre><code>for model in EXP_B:
+    profile_model(model,&#x27;B&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>No textual output in this cell.</pre></article><article><h2>Code cell 29</h2><details><summary>Show code</summary><pre><code>rows=read_jsonl(RESULTS/&#x27;profiles.jsonl&#x27;)
+columns=[&#x27;model&#x27;,&#x27;processor&#x27;,&#x27;size_gb&#x27;,&#x27;vram_gb&#x27;,&#x27;nvidia_vram_delta_gb&#x27;,&#x27;decode_tps_mean&#x27;,&#x27;decode_tps_sd&#x27;,&#x27;prompt_tps_mean&#x27;,&#x27;prompt_tps_sd&#x27;,&#x27;warm_ttft_s_mean&#x27;,&#x27;warm_ttft_s_sd&#x27;,&#x27;load_s&#x27;,&#x27;severity_correct_of_10&#x27;]
+df=pd.DataFrame(rows)
+for experiment in [&#x27;A&#x27;,&#x27;B&#x27;]:
+    print(&#x27;Experiment&#x27;,experiment)
+    display(df[df.experiment==experiment][columns].round(3))
+print(&#x27;Model memory is from /api/ps; NVIDIA memory delta is measured before/after loading on GPU track.&#x27;)
+if TRACK==&#x27;GPU&#x27;:
+    bad=df[~df.gpu_comparable]
+    print(&#x27;Partially offloaded rows, excluded from GPU model selection:&#x27;,list(bad.model))
+</code></pre></details><h3>Saved output</h3><pre>Experiment A
+
+                         model processor  size_gb  vram_gb  \
+0  llama3.2:1b-instruct-q4_K_M  100% CPU    0.934      0.0   
+3    llama3.2:1b-instruct-q8_0  100% CPU    1.447      0.0   
+4    llama3.2:1b-instruct-fp16  100% CPU    2.606      0.0   
+
+  nvidia_vram_delta_gb  decode_tps_mean  decode_tps_sd  prompt_tps_mean  \
+0                 None          186.297          2.474        10550.399   
+3                 None          110.326          2.917         4867.562   
+4                 None           60.527          1.344         2950.460   
+
+   prompt_tps_sd  warm_ttft_s_mean  warm_ttft_s_sd  load_s  \
+0        523.352             0.005           0.000   8.256   
+3        315.551             0.011           0.001  15.974   
+4        597.417             0.019           0.004   1.039   
+
+   severity_correct_of_10  
+0                       5  
+3                       5  
+4                       5  
+Experiment B
+
+               model processor  size_gb  vram_gb nvidia_vram_delta_gb  \
+1  qwen3:0.6b-q4_K_M  100% CPU    1.018      0.0                 None   
+2  qwen3:1.7b-q4_K_M  100% CPU    1.878      0.0                 None   
+
+   decode_tps_mean  decode_tps_sd  prompt_tps_mean  prompt_tps_sd  \
+1          195.042         69.574         9522.524       1952.158   
+2          126.484          5.652         5815.035        242.021   
+
+   warm_ttft_s_mean  warm_ttft_s_sd  load_s  severity_correct_of_10  
+1             0.005           0.001   0.842                       8  
+2             0.008           0.000   0.472                      10  
+Model memory is from /api/ps; NVIDIA memory delta is measured before/after loading on GPU track.
+</pre></article><article><h2>Code cell 35</h2><details><summary>Show code</summary><pre><code>chosen=choose_model(read_jsonl(RESULTS/&#x27;profiles.jsonl&#x27;))
+PARALLEL_MODEL=chosen[&#x27;model&#x27;]
+print(&#x27;Parallel test model:&#x27;,PARALLEL_MODEL)
+</code></pre></details><h3>Saved output</h3><pre>Parallel test model: qwen3:1.7b-q4_K_M
+</pre></article><article><h2>Code cell 36</h2><details><summary>Show code</summary><pre><code>unload_all()
+par=[parallel_test(PARALLEL_MODEL,n) for n in [1,N_PARALLEL]]
+display(pd.DataFrame([{k:v for k,v in row.items() if k not in [&#x27;memory&#x27;,&#x27;responses&#x27;]} for row in par]))
+for row in par:print(row[&#x27;parallel_requests&#x27;],&#x27;requests: model memory GB&#x27;,row[&#x27;memory&#x27;][&#x27;size_gb&#x27;],&#x27;model GPU GB&#x27;,row[&#x27;memory&#x27;][&#x27;vram_gb&#x27;],&#x27;NVIDIA used GB&#x27;,row[&#x27;nvidia_memory_gb&#x27;])
+if not (RESULTS/&#x27;model_card.json&#x27;).exists():
+    save_summary()
+</code></pre></details><h3>Saved output</h3><pre>               model  parallel_requests  \
+0  qwen3:1.7b-q4_K_M                  1   
+1  qwen3:1.7b-q4_K_M                  2   
+
+                          per_request_tps  per_request_tps_mean  \
+0                     [119.0625304608168]            119.062530   
+1  [67.15081078575713, 55.79800062912769]             61.474406   
+
+   aggregate_tps    wall_s  tokens_total nvidia_memory_gb  
+0      76.410964  0.745966            57             None  
+1      88.731372  1.465096           130             None  
+1 requests: model memory GB 1.87761664 model GPU GB 0.0 NVIDIA used GB None
+2 requests: model memory GB 1.87761664 model GPU GB 0.0 NVIDIA used GB None
+</pre></article><article><h2>Code cell 41</h2><details><summary>Show code</summary><pre><code>MODEL_CARD=json.loads((RESULTS/&#x27;model_card.json&#x27;).read_text())
+assert MODEL_CARD[&#x27;model&#x27;] and MODEL_CARD[&#x27;reason_for_choice&#x27;]
+assert MODEL_CARD[&#x27;model&#x27;]==PARALLEL_MODEL, &#x27;Model card differs from the measured model selection.&#x27;
+display(MODEL_CARD)
+</code></pre></details><h3>Saved output</h3><pre>{&#x27;model&#x27;: &#x27;qwen3:1.7b-q4_K_M&#x27;,
+ &#x27;track&#x27;: &#x27;CPU&#x27;,
+ &#x27;runtime&#x27;: &#x27;local CPU, Apple M4 Pro&#x27;,
+ &#x27;decode_tps&#x27;: 126.48373503343504,
+ &#x27;size_gb&#x27;: 1.87761664,
+ &#x27;vram_gb&#x27;: 0.0,
+ &#x27;severity_correct_of_10&#x27;: 10,
+ &#x27;reason_for_choice&#x27;: &#x27;I selected highest measured severity accuracy among Qwen size candidates, breaking ties by measured speed and memory efficiency; accuracy 10/10, speed 126.48 tok/s, memory 1.88 GB.&#x27;}</pre></article><article><h2>Code cell 43</h2><details><summary>Show code</summary><pre><code>langchain_path=RESULTS/&#x27;langchain_response.json&#x27;
+if langchain_path.exists():
+    lc_result=json.loads(langchain_path.read_text())
+else:
+    lc_result=langchain_call(MODEL_CARD[&#x27;model&#x27;])
+print(&#x27;Actual LangChain response:&#x27;)
+print(lc_result[&#x27;content&#x27;])
+print(&#x27;Measured wall seconds:&#x27;,lc_result[&#x27;wall_s&#x27;])
+</code></pre></details><h3>Saved output</h3><pre>Actual LangChain response:
+A read replica can have higher latency because it is a separate database that handles read requests, leading to additional network overhead and potential delays in data synchronization. The primary database is optimized for write operations, while the replica is designed for read, which can result in slower response times due to less optimization and higher network latency.
+Measured wall seconds: 0.6537722499997471
+</pre></article><article><h2>Code cell 45</h2><details><summary>Show code</summary><pre><code>print(&#x27;The forced CPU-offload demonstration is optional and was not included in this run.&#x27;)
+</code></pre></details><h3>Saved output</h3><pre>The forced CPU-offload demonstration is optional and was not included in this run.
+</pre></article></main></body></html>
